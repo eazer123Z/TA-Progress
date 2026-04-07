@@ -1,224 +1,315 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Progress TA — Smart Room IoT & CV</title>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="assets/css/style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IoTzy — Thesis Dashboard & Smart Room 3D</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="assets/css/style.css">
 </head>
-<body class="theme-lightblue">
-    <div id="canvas-container"></div>
-    <nav class="navbar">
-        <div class="container">
-            <div class="nav-content">
-                <div class="logo">
-                    <i class="fas fa-microchip"></i>
-                    <span>IoT<em>zy</em></span>
-                </div>
-                <div class="nav-links">
-                    <a href="#overview" class="active">Overview</a>
-                    <a href="#simulation">Smart Room 3D</a>
-                    <a href="#components">Komponen</a>
-                    <a href="#logs">Log Bimbingan</a>
-                </div>
+<body>
+
+<!-- NAVBAR -->
+<nav>
+  <div class="nav-inner">
+    <a href="#" class="logo"><i class="fas fa-microchip"></i>IoT<em>zy</em></a>
+    <div class="nav-links">
+      <a href="#hero">Overview</a>
+      <a href="#monitoring">Monitoring</a>
+      <a href="#simulation">Smart Room 3D</a>
+      <a href="#components">Komponen</a>
+      <a href="#logs">Log Bimbingan</a>
+    </div>
+    <div class="mqtt-pill" id="mqttPill">
+      <div class="dot" id="mqttDot"></div>
+      <span id="mqttLabel">MQTT Disconnected</span>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero" id="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-inner">
+    <div class="hero-grid">
+      <div>
+        <div class="badge"><div class="dot"></div> Tugas Akhir / Skripsi</div>
+        <h1>Smart Room <span>IoT</span> &<br>Computer Vision</h1>
+        <p class="subtitle">Monitoring, Automasi & Kontrol berbasis ESP32 + TensorFlow.js</p>
+        <div class="advisors">
+          <div class="advisor">
+            <div class="advisor-icon"><i class="fas fa-user-tie"></i></div>
+            <div>
+              <span>Dosen Pembimbing 1</span>
+              <strong>Abdullah Hanif, S.Kom., M.Kom.</strong>
             </div>
+          </div>
+          <div class="advisor">
+            <div class="advisor-icon"><i class="fas fa-user-tie"></i></div>
+            <div>
+              <span>Dosen Pembimbing 2</span>
+              <strong>Fara Triadi, S.T., M.T.</strong>
+            </div>
+          </div>
         </div>
-    </nav>
-
-    <header class="hero" id="overview">
-        <div class="container">
-            <div class="hero-content">
-                <div class="badge">Tugas Akhir / Skripsi</div>
-                <h1>Rancang Bangun Smart Room Berbasis Internet of Things dan Computer Vision</h1>
-                <p class="subtitle">Monitoring, Automasi, dan Kontrol Manual</p>
-                
-                <div class="advisors">
-                    <div class="advisor">
-                        <i class="fas fa-user-tie"></i>
-                        <div>
-                            <span>Dosen Pembimbing 1</span>
-                            <strong>Abdullah Hanif, S.Kom., M.Kom.</strong>
-                        </div>
-                    </div>
-                    <div class="advisor">
-                        <i class="fas fa-user-tie"></i>
-                        <div>
-                            <span>Dosen Pembimbing 2</span>
-                            <strong>Fara Triadi, S.T., M.T.</strong>
-                        </div>
-                    </div>
-                </div>
-            </div>
+      </div>
+      <div>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-val" id="heroTemp">--</div>
+            <div class="stat-label">Suhu Ruangan °C</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val" id="heroHumid">--</div>
+            <div class="stat-label">Kelembaban %</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val" id="heroPerson">0</div>
+            <div class="stat-label">Jumlah Orang</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val" id="heroFan">--</div>
+            <div class="stat-label">Fan Speed %</div>
+          </div>
         </div>
-    </header>
+      </div>
+    </div>
+  </div>
+</section>
 
-    <main class="container">
-        <section class="section" id="description">
-            <div class="card card-dark">
-                <div class="card-header">
-                    <i class="fas fa-info-circle"></i>
-                    <h2>Deskripsi Proyek</h2>
-                </div>
-                <p>Smart room dengan berbagai alat IoT yang berfungsi otomatis sesuai settingan pengguna. Fitur utama mencakup kontrol lampu berbasis intensitas cahaya kamera, pengaturan kecepatan kipas berbasis suhu (DHT22) dan jumlah orang (TensorFlow.js), serta sistem penguncian pintu otomatis yang terjadwal.</p>
-            </div>
-        </section>
-
-        <section class="section" id="simulation">
-            <div class="section-title">
-                <i class="fas fa-cube"></i>
-                <h2>Smart Room Simulation</h2>
-            </div>
-            <div class="sim-container">
-                <div class="sim-sidebar">
-                    <div class="side-head">
-                        <div class="side-title">PERANGKAT IOT</div>
-                        <div class="side-sub">Sinkronisasi Real-time 3D</div>
-                    </div>
-                    <div class="add-grid">
-                        <button class="add-btn" data-type="led">+ LED</button>
-                        <button class="add-btn" data-type="fan">+ Fan</button>
-                        <button class="add-btn" data-type="cam">+ Cam</button>
-                        <button class="add-btn" data-type="esp">+ ESP32</button>
-                        <button class="add-btn" data-type="door">+ Door</button>
-                    </div>
-                    <div id="deviceList" class="device-list">
-                        <!-- Devices from JS -->
-                    </div>
-                </div>
-                <div class="sim-main">
-                    <div class="sim-header">
-                        <div class="sim-status">
-                            <div class="dot on"></div>
-                            <span>Live Simulation View</span>
-                        </div>
-                        <div class="sim-hint">DRAG = ORBIT · SCROLL = ZOOM · KLIK = TOGGLE</div>
-                    </div>
-                    <div id="sim-canvas"></div>
-                </div>
-            </div>
-        </section>
-
-        <section class="section" id="components">
-            <div class="section-title">
-                <i class="fas fa-layer-group"></i>
-                <h2>List Komponen</h2>
-            </div>
-            <div class="component-grid">
-                <div class="comp-card">
-                    <i class="fas fa-brain"></i>
-                    <h3>ESP32</h3>
-                    <p>Microcontroller Utama</p>
-                </div>
-                <div class="comp-card">
-                    <i class="fas fa-camera"></i>
-                    <h3>ESP32-CAM</h3>
-                    <p>Computer Vision & Stream</p>
-                </div>
-                <div class="comp-card">
-                    <i class="fas fa-thermometer-half"></i>
-                    <h3>DHT22</h3>
-                    <p>Sensor Suhu & Kelembaban</p>
-                </div>
-                <div class="comp-card">
-                    <i class="fas fa-bolt"></i>
-                    <h3>MOSFET IRLZ44N</h3>
-                    <p>Kontrol Daya DC Fan</p>
-                </div>
-                <div class="comp-card">
-                    <i class="fas fa-wind"></i>
-                    <h3>DC Fan 5V</h3>
-                    <p>Sistem Pendingin</p>
-                </div>
-                <div class="comp-card">
-                    <i class="fas fa-lightbulb"></i>
-                    <h3>LED 5mm</h3>
-                    <p>Output Pencahayaan</p>
-                </div>
-                <div class="comp-card">
-                    <i class="fas fa-door-open"></i>
-                    <h3>Servo SG90</h3>
-                    <p>Mekanisme Kunci Pintu</p>
-                </div>
-                <div class="comp-card">
-                    <i class="fas fa-plug"></i>
-                    <h3>Adaptor 12V</h3>
-                    <p>Sumber Daya Utama</p>
-                </div>
-            </div>
-        </section>
-
-        <section class="section" id="logs">
-            <div class="section-title-flex">
-                <div class="section-title">
-                    <i class="fas fa-history"></i>
-                    <h2>Log Bimbingan & Progress</h2>
-                </div>
-                <button class="btn btn-primary" id="btnAddLog">
-                    <i class="fas fa-plus"></i> Tambah Log
-                </button>
-            </div>
-            <div class="log-table-container">
-                <table class="log-table">
-                    <thead>
-                        <tr>
-                            <th>No</th>
-                            <th>Tanggal</th>
-                            <th>Dosen</th>
-                            <th>Materi & Konsultasi</th>
-                            <th>Progress & Hasil</th>
-                            <th>Aksi</th>
-                        </tr>
-                    </thead>
-                    <tbody id="logTableBody">
-                        <!-- Data populated by JS -->
-                    </tbody>
-                </table>
-            </div>
-        </section>
-    </main>
-
-    <!-- Modal CRUD -->
-    <div class="modal" id="logModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="modalTitle">Tambah Log Bimbingan</h3>
-                <button class="close-modal">&times;</button>
-            </div>
-            <form id="logForm">
-                <input type="hidden" id="logId">
-                <div class="form-group">
-                    <label for="logDate">Tanggal</label>
-                    <input type="text" id="logDate" placeholder="Contoh: 26-02-2026" required>
-                </div>
-                <div class="form-group">
-                    <label for="logAdvisor">Dosen</label>
-                    <input type="text" id="logAdvisor" placeholder="Nama Dosen" required>
-                </div>
-                <div class="form-group">
-                    <label for="logConsultation">Materi & Konsultasi</label>
-                    <textarea id="logConsultation" rows="3" placeholder="Apa yang dikonsultasikan?" required></textarea>
-                </div>
-                <div class="form-group">
-                    <label for="logResult">Progress & Hasil</label>
-                    <textarea id="logResult" rows="3" placeholder="Hasil dari bimbingan" required></textarea>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary close-modal">Batal</button>
-                    <button type="submit" class="btn btn-primary">Simpan Log</button>
-                </div>
-            </form>
-        </div>
+<!-- MONITORING -->
+<section class="section" id="monitoring">
+  <div class="section-inner">
+    <div class="sec-head">
+      <i class="fas fa-chart-line"></i>
+      <h2>Monitoring Sensor Real-time</h2>
     </div>
 
-    <footer class="footer">
-        <div class="container">
-            <p>&copy; 2026 Dashboard Tugas Akhir. Dibuat untuk monitoring progres penelitian.</p>
+    <!-- MQTT CONFIG -->
+    <div class="mqtt-panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+        <div style="font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)">Konfigurasi MQTT Broker</div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost" style="font-size:.75rem;padding:8px 16px" onclick="toggleSimulation()"><i class="fas fa-play-circle" id="simIcon"></i> <span id="simLabel">Mulai Simulasi</span></button>
+          <button class="btn btn-primary" style="font-size:.75rem;padding:8px 16px" onclick="connectMQTT()"><i class="fas fa-plug"></i> Connect MQTT</button>
         </div>
-    </footer>
+      </div>
+      <div class="mqtt-grid">
+        <div class="form-group">
+          <label>Broker Host</label>
+          <input type="text" id="mqttHost" value="broker.emqx.io" placeholder="broker.emqx.io">
+        </div>
+        <div class="form-group">
+          <label>Port (WSS)</label>
+          <input type="text" id="mqttPort" value="8084" placeholder="8084">
+        </div>
+        <div class="form-group">
+          <label>Topic Prefix</label>
+          <input type="text" id="mqttPrefix" value="smartroom" placeholder="smartroom">
+        </div>
+        <button class="btn btn-primary" style="padding:10px 18px;font-size:.78rem" onclick="connectMQTT()"><i class="fas fa-link"></i></button>
+      </div>
+    </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
-    <script src="assets/js/main.js"></script>
+    <!-- SENSOR CARDS -->
+    <div class="sensor-grid">
+      <div class="sensor-card" style="--accent:var(--amber)">
+        <div class="sensor-label"><i class="fas fa-thermometer-half" style="margin-right:6px"></i>Suhu — DHT22</div>
+        <div><span class="sensor-val" id="sTemp">--</span><span class="sensor-unit">°C</span></div>
+        <div class="sensor-sub" id="sHumid">Kelembaban: — %</div>
+        <div class="sensor-bar"><div class="sensor-bar-fill" id="tempBar" style="width:0%;--accent:var(--amber)"></div></div>
+      </div>
+      <div class="sensor-card" style="--accent:var(--purple)">
+        <div class="sensor-label"><i class="fas fa-users" style="margin-right:6px"></i>Jumlah Orang — ESP32-CAM</div>
+        <div><span class="sensor-val" id="sPerson">0</span><span class="sensor-unit">orang</span></div>
+        <div class="sensor-sub" id="sBright">Brightness: — %</div>
+        <div class="sensor-bar"><div class="sensor-bar-fill" id="personBar" style="width:0%;--accent:var(--purple)"></div></div>
+      </div>
+      <div class="sensor-card" style="--accent:var(--cyan)">
+        <div class="sensor-label"><i class="fas fa-wind" style="margin-right:6px"></i>Fan Speed — DC Fan 5V</div>
+        <div><span class="sensor-val" id="sFan">0</span><span class="sensor-unit">%</span></div>
+        <div class="sensor-sub" id="sFanMode">Mode: PWM Control</div>
+        <div class="sensor-bar"><div class="sensor-bar-fill" id="fanBar" style="width:0%"></div></div>
+      </div>
+      <div class="sensor-card" style="--accent:var(--green)">
+        <div class="sensor-label"><i class="fas fa-door-open" style="margin-right:6px"></i>Pintu — Servo SG90</div>
+        <div><span class="sensor-val" id="sDoor" style="font-size:1.4rem">LOCKED</span></div>
+        <div class="sensor-sub" id="sDoorTime">Status: Secure</div>
+        <div class="sensor-bar"><div class="sensor-bar-fill" id="doorBar" style="width:0%;--accent:var(--green)"></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 3D SIMULATION -->
+<section class="section" id="simulation">
+  <div class="section-inner">
+    <div class="sec-head">
+      <i class="fas fa-cube"></i>
+      <h2>Smart Room — Simulasi 3D Realistis</h2>
+    </div>
+    <div class="sim-wrap">
+      <!-- LEFT SIDEBAR: Device List -->
+      <div class="sim-sidebar-l">
+        <div class="sidebar-head">
+          <div class="sidebar-title">Perangkat IoT</div>
+          <div class="sidebar-sub">Tambah atau Kontrol Perangkat</div>
+        </div>
+        <div class="add-grid">
+          <button class="add-btn" data-type="led">+ LED</button>
+          <button class="add-btn" data-type="fan">+ Fan</button>
+          <button class="add-btn" data-type="cam">+ Cam</button>
+          <button class="add-btn" data-type="esp">+ ESP32</button>
+          <button class="add-btn" data-type="door">+ Door</button>
+        </div>
+        <div class="dev-list" id="deviceList"></div>
+      </div>
+      <!-- CENTER: Three.js Canvas -->
+      <div class="sim-center">
+        <div class="sim-topbar">
+          <div class="sim-status">
+            <div class="dot on" id="simDot"></div>
+            <span>Live 3D View</span>
+          </div>
+          <div class="sim-hint">DRAG = ORBIT · SCROLL = ZOOM · CLICK = SELECT</div>
+        </div>
+        <div id="three-canvas"></div>
+      </div>
+      <!-- RIGHT SIDEBAR: Properties + Wiring -->
+      <div class="sim-sidebar-r">
+        <div class="sidebar-head">
+          <div class="sidebar-title">Properties</div>
+          <div class="sidebar-sub" id="selDevName">Pilih perangkat di scene</div>
+        </div>
+        <div class="prop-panel" id="propPanel">
+          <div class="prop-section">
+            <div class="prop-title">Info</div>
+            <div class="prop-row"><span class="prop-key">Status</span><span class="prop-val" id="pStatus">—</span></div>
+            <div class="prop-row"><span class="prop-key">Level</span><span class="prop-val" id="pLevel">—</span></div>
+            <div class="prop-row"><span class="prop-key">MQTT Topic</span><span class="prop-val" id="pTopic" style="font-size:.65rem">—</span></div>
+            <div class="prop-row"><span class="prop-key">Update</span><span class="prop-val live" id="pTime">—</span></div>
+          </div>
+        </div>
+        <div class="wiring-legend">
+          <div class="prop-title">Wiring Legend</div>
+          <div class="wire-item"><div class="wire-dot" style="background:#00c8ff"></div><span class="wire-label">LED Signal</span></div>
+          <div class="wire-item"><div class="wire-dot" style="background:#0af"></div><span class="wire-label">Fan PWM</span></div>
+          <div class="wire-item"><div class="wire-dot" style="background:#f59e0b"></div><span class="wire-label">Camera Data</span></div>
+          <div class="wire-item"><div class="wire-dot" style="background:#10b981"></div><span class="wire-label">Servo Signal</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- COMPONENTS -->
+<section class="section" id="components">
+  <div class="section-inner">
+    <div class="sec-head">
+      <i class="fas fa-layer-group"></i>
+      <h2>Daftar Komponen Utama</h2>
+    </div>
+    <div class="comp-grid">
+      <div class="comp-card">
+        <div class="comp-icon"><i class="fas fa-brain"></i></div>
+        <div class="comp-name">ESP32</div>
+        <div class="comp-desc">Microcontroller utama dengan Wi-Fi + Bluetooth terintegrasi.</div>
+        <div class="comp-spec">ESP32-WROOM-32 · 240MHz</div>
+      </div>
+      <div class="comp-card">
+        <div class="comp-icon"><i class="fas fa-camera"></i></div>
+        <div class="comp-name">ESP32-CAM</div>
+        <div class="comp-desc">Modul kamera untuk deteksi objek menggunakan TensorFlow.js.</div>
+        <div class="comp-spec">OV2640 · 2MP · AI Powered</div>
+      </div>
+      <div class="comp-card">
+        <div class="comp-icon"><i class="fas fa-thermometer-half"></i></div>
+        <div class="comp-name">DHT22</div>
+        <div class="comp-desc">Sensor suhu dan kelembaban udara dengan presisi tinggi.</div>
+        <div class="comp-spec">-40~80°C · ±0.5°C</div>
+      </div>
+      <div class="comp-card">
+        <div class="comp-icon"><i class="fas fa-door-open"></i></div>
+        <div class="comp-name">Servo SG90</div>
+        <div class="comp-desc">Aktuator untuk sistem pengunci pintu otomatis.</div>
+        <div class="comp-spec">9g · 1.8kg.cm · 180°</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- LOG BIMBINGAN -->
+<section class="section" id="logs">
+  <div class="section-inner">
+    <div class="sec-head-row">
+      <div class="sec-head" style="margin-bottom:0">
+        <i class="fas fa-book"></i>
+        <h2>Log Bimbingan Tugas Akhir</h2>
+      </div>
+      <button class="btn btn-primary" onclick="openLogModal()"><i class="fas fa-plus"></i> Tambah Log</button>
+    </div>
+    <div class="log-wrap">
+      <table class="log-table">
+        <thead>
+          <tr>
+            <th width="50">No</th>
+            <th width="120">Tanggal</th>
+            <th width="180">Pembimbing</th>
+            <th>Materi Konsultasi</th>
+            <th>Hasil & Progress</th>
+            <th width="100">Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="logBody">
+          <!-- Rendered via JS -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- MODAL LOG -->
+<div class="modal" id="logModal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3 id="modalTitle">Tambah Log Bimbingan</h3>
+      <button class="modal-close" onclick="closeLogModal()">&times;</button>
+    </div>
+    <form class="modal-form" onsubmit="saveLog(event)">
+      <input type="hidden" id="logId">
+      <div class="form-group">
+        <label>Tanggal</label>
+        <input type="date" id="logDate" required>
+      </div>
+      <div class="form-group">
+        <label>Dosen Pembimbing</label>
+        <input type="text" id="logAdv" placeholder="Nama Dosen" required>
+      </div>
+      <div class="form-group">
+        <label>Materi Konsultasi</label>
+        <textarea id="logConsult" placeholder="Apa yang didiskusikan?" required></textarea>
+      </div>
+      <div class="form-group">
+        <label>Hasil & Progress</label>
+        <textarea id="logResult" placeholder="Apa hasil bimbingannya?" required></textarea>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" onclick="closeLogModal()">Batal</button>
+        <button type="submit" class="btn btn-primary">Simpan Log</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<footer>
+  <div class="footer-inner">
+    <p>&copy; 2026 IoTzy Ecosystem — Smart Room Project for Thesis Progress</p>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+<script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
+<script src="assets/js/main.js"></script>
 </body>
 </html>
