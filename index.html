@@ -71,14 +71,32 @@
                 <h2>Smart Room Simulation</h2>
             </div>
             <div class="sim-container">
-                <div class="sim-header">
-                    <div class="sim-status">
-                        <div class="dot on"></div>
-                        <span>Live Simulation View</span>
+                <div class="sim-sidebar">
+                    <div class="side-head">
+                        <div class="side-title">PERANGKAT IOT</div>
+                        <div class="side-sub">Sinkronisasi Real-time 3D</div>
                     </div>
-                    <div class="sim-hint">DRAG = ORBIT · SCROLL = ZOOM · KLIK = TOGGLE</div>
+                    <div class="add-grid">
+                        <button class="add-btn" data-type="led">+ LED</button>
+                        <button class="add-btn" data-type="fan">+ Fan</button>
+                        <button class="add-btn" data-type="cam">+ Cam</button>
+                        <button class="add-btn" data-type="esp">+ ESP32</button>
+                        <button class="add-btn" data-type="door">+ Door</button>
+                    </div>
+                    <div id="deviceList" class="device-list">
+                        <!-- Devices from JS -->
+                    </div>
                 </div>
-                <div id="sim-canvas"></div>
+                <div class="sim-main">
+                    <div class="sim-header">
+                        <div class="sim-status">
+                            <div class="dot on"></div>
+                            <span>Live Simulation View</span>
+                        </div>
+                        <div class="sim-hint">DRAG = ORBIT · SCROLL = ZOOM · KLIK = TOGGLE</div>
+                    </div>
+                    <div id="sim-canvas"></div>
+                </div>
             </div>
         </section>
 
