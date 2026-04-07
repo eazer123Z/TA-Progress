@@ -25,14 +25,7 @@ body {
 }
 
 #canvas-container {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: -1;
-    pointer-events: none;
-    opacity: 0.6;
+    display: none;
 }
 
 .container {
@@ -45,8 +38,8 @@ body {
 
 /* Navbar */
 .navbar {
-    height: 70px;
-    background: rgba(10, 17, 24, 0.7);
+    height: 60px;
+    background: rgba(10, 17, 24, 0.95);
     backdrop-filter: blur(20px);
     border-bottom: 1px solid var(--border);
     position: fixed;
@@ -66,22 +59,26 @@ body {
 .logo {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     font-family: 'Orbitron', sans-serif;
     font-weight: 900;
-    font-size: 1.4rem;
-    letter-spacing: 0.1em;
+    font-size: 1.2rem;
+    letter-spacing: 0.05em;
 }
 
 .logo span {
-    background: linear-gradient(to right, #00d2ff, #3a7bd5);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: #fff;
+}
+
+.logo em {
+    color: var(--primary);
+    font-style: normal;
+    text-shadow: 0 0 10px var(--primary-glow);
 }
 
 .logo i {
     color: var(--primary);
-    filter: drop-shadow(0 0 8px var(--primary-glow));
+    font-size: 1.1rem;
 }
 
 .nav-links {
@@ -92,7 +89,7 @@ body {
 .nav-links a {
     text-decoration: none;
     color: var(--text-muted);
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     font-weight: 600;
     transition: all 0.2s;
     text-transform: uppercase;
@@ -104,10 +101,67 @@ body {
     text-shadow: 0 0 10px var(--primary-glow);
 }
 
+/* Simulation Section */
+.sim-container {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    overflow: hidden;
+    position: relative;
+}
+
+.sim-header {
+    padding: 15px 25px;
+    background: rgba(0, 0, 0, 0.3);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+}
+
+.sim-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text-main);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.sim-hint {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+
+.dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #394450;
+}
+
+.dot.on {
+    background: var(--primary);
+    box-shadow: 0 0 10px var(--primary-glow);
+}
+
+#sim-canvas {
+    width: 100%;
+    height: 500px;
+    cursor: grab;
+}
+
+#sim-canvas:active {
+    cursor: grabbing;
+}
+
 /* Hero */
 .hero {
-    padding: 140px 0 60px;
-    background: radial-gradient(circle at 50% 0%, rgba(0, 210, 255, 0.12), transparent 70%);
+    padding: 110px 0 50px;
+    background: radial-gradient(circle at 50% 0%, rgba(0, 210, 255, 0.08), transparent 70%);
 }
 
 .hero-content {
