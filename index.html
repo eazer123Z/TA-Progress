@@ -113,9 +113,14 @@
         </section>
 
         <section class="section" id="logs">
-            <div class="section-title">
-                <i class="fas fa-history"></i>
-                <h2>Log Bimbingan & Progress</h2>
+            <div class="section-title-flex">
+                <div class="section-title">
+                    <i class="fas fa-history"></i>
+                    <h2>Log Bimbingan & Progress</h2>
+                </div>
+                <button class="btn btn-primary" id="btnAddLog">
+                    <i class="fas fa-plus"></i> Tambah Log
+                </button>
             </div>
             <div class="log-table-container">
                 <table class="log-table">
@@ -126,50 +131,49 @@
                             <th>Dosen</th>
                             <th>Materi & Konsultasi</th>
                             <th>Progress & Hasil</th>
+                            <th>Aksi</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        <tr>
-                            <td>1</td>
-                            <td>26-02-2026</td>
-                            <td>Pak Hanif</td>
-                            <td>
-                                <strong>Diskusi Bentuk Alat:</strong> Miniatur vs Portable.<br>
-                                <span class="tag">Keputusan:</span> Fokus ke miniatur untuk pengujian deteksi orang.
-                            </td>
-                            <td>
-                                <strong>Hasil:</strong> Komponen dasar (ESP, DHT, Servo) berhasil terhubung dan berjalan.
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>2</td>
-                            <td>04-03-2026</td>
-                            <td>Pak Fara</td>
-                            <td>
-                                <strong>Metode CV:</strong> TensorFlow.js (COCO-SSD).<br>
-                                <span class="tag">Riset:</span> Analisis margin error saat orang berdempetan.
-                            </td>
-                            <td>
-                                <strong>Hasil:</strong> Sistem deteksi orang, monitoring suhu, dan kontrol alat via web sudah sinkron.
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>3</td>
-                            <td>12-03-2026</td>
-                            <td>Pak Hanif</td>
-                            <td>
-                                <strong>Implementasi AI:</strong> Penggunaan AI dalam koding.<br>
-                                <span class="tag">Riset:</span> Monitoring konsumsi daya (Sensor INA219).
-                            </td>
-                            <td>
-                                <strong>Hasil:</strong> Pemahaman kode diperdalam, opsi monitoring daya mulai diterapkan secara opsional.
-                            </td>
-                        </tr>
+                    <tbody id="logTableBody">
+                        <!-- Data populated by JS -->
                     </tbody>
                 </table>
             </div>
         </section>
     </main>
+
+    <!-- Modal CRUD -->
+    <div class="modal" id="logModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">Tambah Log Bimbingan</h3>
+                <button class="close-modal">&times;</button>
+            </div>
+            <form id="logForm">
+                <input type="hidden" id="logId">
+                <div class="form-group">
+                    <label for="logDate">Tanggal</label>
+                    <input type="text" id="logDate" placeholder="Contoh: 26-02-2026" required>
+                </div>
+                <div class="form-group">
+                    <label for="logAdvisor">Dosen</label>
+                    <input type="text" id="logAdvisor" placeholder="Nama Dosen" required>
+                </div>
+                <div class="form-group">
+                    <label for="logConsultation">Materi & Konsultasi</label>
+                    <textarea id="logConsultation" rows="3" placeholder="Apa yang dikonsultasikan?" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="logResult">Progress & Hasil</label>
+                    <textarea id="logResult" rows="3" placeholder="Hasil dari bimbingan" required></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary close-modal">Batal</button>
+                    <button type="submit" class="btn btn-primary">Simpan Log</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <footer class="footer">
         <div class="container">
