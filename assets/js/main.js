@@ -461,27 +461,64 @@ function animate() {
 // LOG BIMBINGAN CRUD
 // ============================================================
 const defaultLogs = [
-  { id: 1, date: '26-02-2026', adv: 'Pak Hanif', consult: '<strong>Diskusi Bentuk Alat:</strong> Miniatur vs Portable.<br><span class="tag">Keputusan</span> Fokus ke miniatur untuk pengujian deteksi orang.', result: '<strong>Hasil:</strong> Komponen dasar (ESP, DHT, Servo) berhasil terhubung.' },
-  { id: 2, date: '04-03-2026', adv: 'Pak Fara', consult: '<strong>Metode CV:</strong> TensorFlow.js COCO-SSD.<br><span class="tag">Riset</span> Analisis margin error saat orang berdempetan.', result: '<strong>Hasil:</strong> Sistem deteksi orang, monitoring suhu, kontrol alat via web sudah sinkron.' },
-  { id: 3, date: '12-03-2026', adv: 'Pak Hanif', consult: '<strong>Implementasi AI:</strong> Penggunaan AI dalam koding.<br><span class="tag">Riset</span> Monitoring konsumsi daya (INA219).', result: '<strong>Hasil:</strong> Pemahaman kode diperdalam, monitoring daya mulai diterapkan opsional.' }
+  { 
+    id: 1, 
+    date: '2026-02-26', 
+    adv: 'Pak Hanif', 
+    tanya: 'Kira kira dari project ini lebih bagus dibuat miniatur ruangan kecil atau alat portable yang bisa dipakai di ruangan asli?, Gimana kalau kamera di ganti sensor dht saja untuk otomatis kipasnya', 
+    materi: 'Pakai apa saja bisa tergantung kamunya yang penting berfungsi dan bekerja lah alatnya, pakai kamera sudah bagus jadi bisa deteksi jumlah orang',
+    tangkap: 'Berarti miniatur saja, yang penting saya coba saja dlu sesuai project saya dengan alat yang ada saja dlu dan bekerja juga berfungsi',
+    progress: 'Uji coba komponen seperti ESP, DHT, dan servo sebagai pengganti kipas',
+    result: 'Komponen dasar sudah berhasil berjalan dan terhubung',
+    source: ''
+  },
+  { 
+    id: 2, 
+    date: '2026-03-04', 
+    adv: 'Pak Fara', 
+    tanya: 'Dari judul saya ini gimana menurut bapak?, Kalau bikin miniatur gin berarti uji cobanya pakai orang orangan mainan?', 
+    materi: 'Pikirkan cara mendeteksi orangnya, metode apa yang dipakai untuk mendeteksi orang, gimana margin errornya jika orang berdampingan di dalam kamera, dan cari latar belakang dari rata-rata penggunaan listrik manusia.',
+    tangkap: 'Saya mencoba deteksi orang di web menggunakan TensorFlow.js dengan model COCO-SSD karena lebih ringan untuk browser, namun akurasinya mungkin tidak setinggi YOLO sehingga margin error bisa lebih besar. Misalnya saat orang berdempetan di kamera, bounding box bisa overlap dan terhitung satu. Solusinya bisa mengganti model ke YOLO atau mengubah posisi kamera agar deteksi lebih jelas.',
+    progress: 'Disini saya lakukan uji coba untuk deteksi orangnya dan konek ke program untuk alat saya seperti lampu menyala saat gelap, servo berputar saat suhu rendah',
+    result: 'Sistem deteksi orang, kontrol alat, seperti lampu dan sensor serta monitoring suhu dengan sensor dht pada web sudah bekerja',
+    source: ''
+  },
+  { 
+    id: 3, 
+    date: '2026-03-12', 
+    adv: 'Pak Hanif', 
+    tanya: 'Gimana jika buat web terlalu bergantung dengan AI, dan progress saya saat ini gimana, serta kemaren saya di beritahu pak fara untuk cari tahu metode pengenalan orangnya', 
+    materi: 'Tidak apa apa asal masih mengerti dasarnya, dipahami seperti ada text hijau di tiap baris kodenya, serta lebih baik jika ada konsumsi listrik yang terpakai',
+    tangkap: 'Ya saya cukup mengerti dengan isi web saya yang saya gunakan PHP native dan menggunakan TensorFlow.js sebagai deteksi orangnya dan untuk konsumsi listrik saya meriset seperti menggunakan sensor ina219',
+    progress: 'Ya saya mematangkan pemahaman ke web yang saya buat serta mencari opsi untuk memantau konsumsi listriknya',
+    result: 'Saat ini opsi konsumsi listriknya masih saya terapkan pada website dengan optional jika menggunakan sensor ina 219',
+    source: ''
+  }
 ];
 let logs = JSON.parse(localStorage.getItem('iotzy_logs')) || defaultLogs;
 
 function renderLogs() {
   const tb = document.getElementById('logBody'); if (!tb) return;
-  tb.innerHTML = logs.map((l, i) => `
+  tb.innerHTML = logs.map((l, i) => {
+    const sourceLink = l.source ? (l.source.startsWith('http') ? `<a href="${l.source}" target="_blank" class="tag" style="text-transform:none"><i class="fas fa-link"></i> Link</a>` : `<span class="tag" style="text-transform:none"><i class="fas fa-file-alt"></i> ${l.source}</span>`) : '—';
+    
+    return `
     <tr>
       <td style="color:var(--muted);font-family:var(--mono);font-size:.8rem">${i + 1}</td>
       <td style="font-family:var(--mono);font-size:.82rem;white-space:nowrap">${l.date}</td>
       <td style="font-weight:600;white-space:nowrap">${l.adv}</td>
-      <td>${l.consult}</td>
-      <td>${l.result}</td>
+      <td style="font-size:.8rem">${l.tanya || '—'}</td>
+      <td style="font-size:.8rem">${l.materi || '—'}</td>
+      <td style="font-size:.8rem">${l.tangkap || '—'}</td>
+      <td style="font-size:.8rem">${l.progress || '—'}</td>
+      <td style="font-size:.8rem">${l.result || '—'}</td>
+      <td>${sourceLink}</td>
       <td class="actions">
         <button class="btn-icon" onclick="editLog(${l.id})"><i class="fas fa-edit"></i></button>
         <button class="btn-icon btn-del" onclick="deleteLog(${l.id})"><i class="fas fa-trash"></i></button>
       </td>
     </tr>
-  `).join('');
+  `}).join('');
 }
 
 window.openLogModal = (edit = false) => {
@@ -491,8 +528,12 @@ window.openLogModal = (edit = false) => {
     document.getElementById('logId').value = '';
     document.getElementById('logDate').value = new Date().toISOString().split('T')[0];
     document.getElementById('logAdv').value = '';
-    document.getElementById('logConsult').value = '';
+    document.getElementById('logTanya').value = '';
+    document.getElementById('logMateri').value = '';
+    document.getElementById('logTangkap').value = '';
+    document.getElementById('logProgress').value = '';
     document.getElementById('logResult').value = '';
+    document.getElementById('logSource').value = '';
   }
 };
 window.closeLogModal = () => { document.getElementById('logModal').classList.remove('open'); };
@@ -501,11 +542,15 @@ window.saveLog = (e) => {
   e.preventDefault();
   const id = document.getElementById('logId').value;
   const data = {
-    id: id || Date.now(),
+    id: id ? parseInt(id) : Date.now(),
     date: document.getElementById('logDate').value,
     adv: document.getElementById('logAdv').value,
-    consult: document.getElementById('logConsult').value.replace(/\n/g, '<br>'),
-    result: document.getElementById('logResult').value.replace(/\n/g, '<br>')
+    tanya: document.getElementById('logTanya').value,
+    materi: document.getElementById('logMateri').value,
+    tangkap: document.getElementById('logTangkap').value,
+    progress: document.getElementById('logProgress').value,
+    result: document.getElementById('logResult').value,
+    source: document.getElementById('logSource').value
   };
   if (id) { const i = logs.findIndex(l => l.id == id); logs[i] = data; } else { logs.push(data); }
   localStorage.setItem('iotzy_logs', JSON.stringify(logs)); renderLogs(); closeLogModal();
@@ -516,8 +561,12 @@ window.editLog = (id) => {
   document.getElementById('logId').value = l.id;
   document.getElementById('logDate').value = l.date;
   document.getElementById('logAdv').value = l.adv;
-  document.getElementById('logConsult').value = l.consult.replace(/<br>/g, '\n').replace(/<\/?[^>]+>/g, '');
-  document.getElementById('logResult').value = l.result.replace(/<br>/g, '\n').replace(/<\/?[^>]+>/g, '');
+  document.getElementById('logTanya').value = l.tanya || '';
+  document.getElementById('logMateri').value = l.materi || '';
+  document.getElementById('logTangkap').value = l.tangkap || '';
+  document.getElementById('logProgress').value = l.progress || '';
+  document.getElementById('logResult').value = l.result || '';
+  document.getElementById('logSource').value = l.source || '';
   window.openLogModal(true);
 };
 

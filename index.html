@@ -254,11 +254,15 @@
         <thead>
           <tr>
             <th width="50">No</th>
-            <th width="120">Tanggal</th>
-            <th width="180">Pembimbing</th>
-            <th>Materi Konsultasi</th>
-            <th>Hasil & Progress</th>
-            <th width="100">Aksi</th>
+            <th width="100">Tanggal</th>
+            <th width="140">Dosen</th>
+            <th>Tanya/Konsul</th>
+            <th>Materi</th>
+            <th>Ditangkap</th>
+            <th>Progress</th>
+            <th>Hasil Project</th>
+            <th width="120">Source/Link</th>
+            <th width="90">Aksi</th>
           </tr>
         </thead>
         <tbody id="logBody">
@@ -287,12 +291,28 @@
         <input type="text" id="logAdv" placeholder="Nama Dosen" required>
       </div>
       <div class="form-group">
-        <label>Materi Konsultasi</label>
-        <textarea id="logConsult" placeholder="Apa yang didiskusikan?" required></textarea>
+        <label>Tanya / Konsul</label>
+        <textarea id="logTanya" placeholder="Apa yang Anda tanyakan?" required></textarea>
       </div>
       <div class="form-group">
-        <label>Hasil & Progress</label>
-        <textarea id="logResult" placeholder="Apa hasil bimbingannya?" required></textarea>
+        <label>Materi</label>
+        <textarea id="logMateri" placeholder="Materi bimbingan"></textarea>
+      </div>
+      <div class="form-group">
+        <label>Yang Ditangkap</label>
+        <textarea id="logTangkap" placeholder="Apa yang Anda tangkap?" required></textarea>
+      </div>
+      <div class="form-group">
+        <label>Progress</label>
+        <textarea id="logProgress" placeholder="Progress saat ini" required></textarea>
+      </div>
+      <div class="form-group">
+        <label>Hasil Project</label>
+        <textarea id="logResult" placeholder="Hasil akhir project"></textarea>
+      </div>
+      <div class="form-group">
+        <label>Source / Link (PDF/Word/Catatan)</label>
+        <input type="text" id="logSource" placeholder="https://... atau Judul Catatan">
       </div>
       <div class="modal-foot">
         <button type="button" class="btn btn-ghost" onclick="closeLogModal()">Batal</button>
