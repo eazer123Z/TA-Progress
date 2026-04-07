@@ -10,13 +10,28 @@
 </head>
 <body>
 
+<!-- LOADING OVERLAY -->
+<div id="loadingOverlay" class="modal open" style="display:flex; z-index:9999;">
+  <div class="modal-box" style="text-align:center;">
+    <div class="logo" style="justify-content:center; font-size:2rem; margin-bottom:20px;"><i class="fas fa-microchip"></i>IoT<em>zy</em></div>
+    <div id="loadingStatus">
+      <i class="fas fa-spinner fa-spin" style="font-size:2rem; color:var(--cyan); margin-bottom:15px;"></i>
+      <p>Menghubungkan ke MQTT Broker...</p>
+    </div>
+    <div id="loadingError" style="display:none;">
+      <i class="fas fa-exclamation-triangle" style="font-size:2rem; color:var(--red); margin-bottom:15px;"></i>
+      <p>Gagal terhubung ke sistem IoT. Silakan cek koneksi internet Anda.</p>
+      <button class="btn btn-primary" style="margin-top:20px;" onclick="location.reload()">Coba Lagi</button>
+    </div>
+  </div>
+</div>
+
 <!-- NAVBAR -->
 <nav>
   <div class="nav-inner">
     <a href="#" class="logo"><i class="fas fa-microchip"></i>IoT<em>zy</em></a>
     <div class="nav-links">
       <a href="#hero">Overview</a>
-      <a href="#monitoring">Monitoring</a>
       <a href="#simulation">Smart Room 3D</a>
       <a href="#components">Komponen</a>
       <a href="#logs">Log Bimbingan</a>
@@ -161,6 +176,7 @@
           <button class="add-btn" data-type="fan">+ Fan</button>
           <button class="add-btn" data-type="cam">+ Cam</button>
           <button class="add-btn" data-type="esp">+ ESP32</button>
+          <button class="add-btn" data-type="dht">+ DHT22</button>
           <button class="add-btn" data-type="door">+ Door</button>
         </div>
         <div class="dev-list" id="deviceList"></div>
@@ -261,7 +277,6 @@
             <th>Ditangkap</th>
             <th>Progress</th>
             <th>Hasil Project</th>
-            <th width="120">Source/Link</th>
             <th width="90">Aksi</th>
           </tr>
         </thead>
@@ -269,6 +284,17 @@
           <!-- Rendered via JS -->
         </tbody>
       </table>
+    </div>
+
+    <!-- SOURCE SECTION -->
+    <div id="sourceDisplay" style="margin-top:30px; padding:25px; background:var(--card); border:1px solid var(--border); border-radius:18px; backdrop-filter:blur(12px);">
+      <div class="sec-head" style="margin-bottom:15px;">
+        <i class="fas fa-paperclip"></i>
+        <h3 style="font-family:'Orbitron',sans-serif; font-size:1rem;">Source & Referensi</h3>
+      </div>
+      <div id="sourceList" style="display:flex; flex-wrap:wrap; gap:12px;">
+        <!-- Rendered via JS -->
+      </div>
     </div>
   </div>
 </section>

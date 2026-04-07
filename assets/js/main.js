@@ -19,7 +19,7 @@ const orbit = { target: new THREE.Vector3(0, 1.6, 0), yaw: 0.8, pitch: 0.38, rad
 const inp = { mode: null, devId: null, ptrId: null, sx: 0, sy: 0, moved: false, offset: new THREE.Vector3(), dragWireDirty: false };
 
 let mqttClient = null;
-const WIRE_COLORS = { led: 0x00c8ff, fan: 0x0af, cam: 0xf59e0b, esp: 0xa855f7, door: 0x10b981 };
+const WIRE_COLORS = { led: 0x00c8ff, fan: 0x0af, cam: 0xf59e0b, esp: 0xa855f7, door: 0x10b981, dht: 0xffffff };
 const wireGroup = new THREE.Group();
 
 // ============================================================
@@ -85,6 +85,7 @@ function init3D() {
   createDevice('fan', -3, -3);
   createDevice('cam', 3, -3.5);
   createDevice('esp', 4, 0.5);
+  createDevice('dht', -2, 2);
   createDevice('door', -RW / 2 + 0.075, 1.2);
 
   animate();
@@ -206,6 +207,21 @@ function buildESP(g, refs) {
   const wifiGlow = new THREE.PointLight(0x00c8ff, 0, 1.5, 2); wifiGlow.position.set(-0.12, 0.1, 0); g.add(wifiGlow); refs.wifiGlow = wifiGlow;
 }
 
+function buildDHT(g, refs) {
+  // Main Body (White Plastic)
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.22, 0.08), mat(0xf0f0f0, 0.4, 0.1)); g.add(body);
+  // Grid pattern (Simulated with dark lines)
+  for (let i = 0; i < 5; i++) {
+    const line = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.005, 0.082), mat(0x333333, 0.8, 0));
+    line.position.y = -0.08 + (i * 0.04); g.add(line);
+  }
+  // Blue label part
+  const label = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.04, 0.082), mat(0x0066cc, 0.5, 0.1));
+  label.position.y = 0.08; g.add(label);
+  const statusLed = new THREE.Mesh(new THREE.SphereGeometry(0.008, 8, 8), new THREE.MeshStandardMaterial({ color: 0x00ff00, emissive: 0x00ff00, emissiveIntensity: 0.5 }));
+  statusLed.position.set(0.04, 0.08, 0.042); g.add(statusLed); refs.statusLed = statusLed;
+}
+
 function buildDoor(g, refs) {
   const frameW = 1.2, frameH = 2.4, frameD = 0.15;
   const leafW = frameW - 0.12, leafH = frameH - 0.08, leafD = 0.06;
@@ -242,6 +258,7 @@ function createDevice(type, x, z) {
   if (type === 'led') { buildLED(group, refs); baseY = RH; }
   else if (type === 'fan') { buildFan(group, refs); baseY = 1.18; }
   else if (type === 'cam') { buildCam(group, refs); baseY = 4.2; ry = 0.3; }
+  else if (type === 'dht') { buildDHT(group, refs); baseY = 1.8; rx = 0; }
   else if (type === 'door') { buildDoor(group, refs); baseY = 0; ry = Math.PI / 2; }
   else { buildESP(group, refs); baseY = 1.45; x = RW / 2 - 0.06; rz = -Math.PI / 2; }
 
@@ -285,6 +302,8 @@ function applyDeviceVisuals(dev) {
   } else if (dev.type === 'door') {
     dev.meshRefs.lockLed.material.color.set(on ? 0x00ff00 : 0xff0000);
     dev.meshRefs.lockLed.material.emissive.set(on ? 0x00ff00 : 0xff0000);
+  } else if (dev.type === 'dht') {
+    dev.meshRefs.statusLed.material.emissiveIntensity = on ? 1.5 : 0.2;
   } else if (dev.type === 'esp') {
     dev.meshRefs.ledStatus.material.emissiveIntensity = on ? 1.0 : 0;
     dev.meshRefs.wifiGlow.intensity = on ? 0.5 : 0;
@@ -318,8 +337,8 @@ function removeDev(id) {
 function renderDeviceList() {
   const list = document.getElementById('deviceList');
   if (!list) return;
-  const labels = { led: 'LED 5mm', fan: 'Fan DC 5V 4010', cam: 'Cam Mini Indoor', esp: 'ESP32 DevKit V1', door: 'Smart Door' };
-  const refs = { led: 'Ref: T-1 3/4 5mm LED', fan: 'Ref: 40×40×10mm DC5V', cam: 'Ref: Bullet mini cam', esp: 'Ref: DevKit V1 38-pin', door: 'Ref: IoTzy Smart Door' };
+  const labels = { led: 'LED 5mm', fan: 'Fan DC 5V 4010', cam: 'Cam Mini Indoor', esp: 'ESP32 DevKit V1', door: 'Smart Door', dht: 'Sensor DHT22' };
+  const refs = { led: 'Ref: T-1 3/4 5mm LED', fan: 'Ref: 40×40×10mm DC5V', cam: 'Ref: Bullet mini cam', esp: 'Ref: DevKit V1 38-pin', door: 'Ref: IoTzy Smart Door', dht: 'Ref: DHT22/AM2302' };
 
   list.innerHTML = devices.map(d => `
     <div class="dev-card" data-id="${d.id}" onclick="selectDevice('${d.id}')">
@@ -356,7 +375,7 @@ function selectDevice(id) {
   orbit.target.copy(dev.group.position);
 }
 
-function labelOf(t) { return { led: 'LED 5mm', fan: 'Fan DC 5V 4010', cam: 'Cam Mini Indoor', esp: 'ESP32 DevKit V1', door: 'Smart Door' }[t] || t; }
+function labelOf(t) { return { led: 'LED 5mm', fan: 'Fan DC 5V 4010', cam: 'Cam Mini Indoor', esp: 'ESP32 DevKit V1', door: 'Smart Door', dht: 'Sensor DHT22' }[t] || t; }
 
 function updateStats() {
   const tot = devices.length, act = devices.filter(d => d.state).length;
@@ -506,10 +525,9 @@ let logs = JSON.parse(localStorage.getItem('iotzy_logs')) || defaultLogs;
 
 function renderLogs() {
   const tb = document.getElementById('logBody'); if (!tb) return;
-  tb.innerHTML = logs.map((l, i) => {
-    const sourceLink = l.source ? (l.source.startsWith('http') ? `<a href="${l.source}" target="_blank" class="tag" style="text-transform:none"><i class="fas fa-link"></i> Link</a>` : `<span class="tag" style="text-transform:none"><i class="fas fa-file-alt"></i> ${l.source}</span>`) : '—';
-    
-    return `
+  const sl = document.getElementById('sourceList');
+  
+  tb.innerHTML = logs.map((l, i) => `
     <tr>
       <td style="color:var(--muted);font-family:var(--mono);font-size:.8rem">${i + 1}</td>
       <td style="font-family:var(--mono);font-size:.82rem;white-space:nowrap">${l.date}</td>
@@ -519,13 +537,28 @@ function renderLogs() {
       <td style="font-size:.8rem">${l.tangkap || '—'}</td>
       <td style="font-size:.8rem">${l.progress || '—'}</td>
       <td style="font-size:.8rem">${l.result || '—'}</td>
-      <td>${sourceLink}</td>
       <td class="actions">
         <button class="btn-icon" onclick="editLog(${l.id})"><i class="fas fa-edit"></i></button>
         <button class="btn-icon btn-del" onclick="deleteLog(${l.id})"><i class="fas fa-trash"></i></button>
       </td>
     </tr>
-  `}).join('');
+  `).join('');
+
+  if (sl) {
+    const sources = logs.filter(l => l.source).map(l => {
+      const isLink = l.source.startsWith('http');
+      return `
+        <div class="stat-card" style="padding:12px 20px; display:flex; align-items:center; gap:12px;">
+          <i class="fas ${isLink ? 'fa-link' : 'fa-file-alt'}" style="color:var(--cyan)"></i>
+          <div style="flex:1">
+            <div style="font-size:0.6rem; color:var(--muted); text-transform:uppercase;">Source dari Log #${logs.indexOf(l) + 1}</div>
+            ${isLink ? `<a href="${l.source}" target="_blank" style="color:var(--text); text-decoration:none; font-size:0.8rem; font-weight:600;">${l.source.substring(0, 30)}...</a>` : `<span style="font-size:0.8rem; font-weight:600;">${l.source}</span>`}
+          </div>
+        </div>
+      `;
+    });
+    sl.innerHTML = sources.length ? sources.join('') : '<p style="color:var(--muted); font-size:0.8rem;">Belum ada source yang diinput.</p>';
+  }
 }
 
 window.openLogModal = (edit = false) => {
@@ -586,17 +619,36 @@ window.deleteLog = (id) => {
 // MQTT & SENSOR SIMULATION
 // ============================================================
 function connectMQTT() {
-  mqttClient = mqtt.connect(MQTT_URL, { clientId: 'iotzy_' + Math.random().toString(16).slice(2, 10) });
+  const overlay = document.getElementById('loadingOverlay');
+  const status = document.getElementById('loadingStatus');
+  const error = document.getElementById('loadingError');
+
+  mqttClient = mqtt.connect(MQTT_URL, { 
+    clientId: 'iotzy_' + Math.random().toString(16).slice(2, 10),
+    connectTimeout: 5000 
+  });
+
   mqttClient.on('connect', () => {
+    console.log('MQTT Connected');
+    if (overlay) overlay.style.display = 'none';
     const pill = document.querySelector('.mqtt-pill');
     if (pill) {
       pill.classList.add('connected');
       document.getElementById('mqttLabel').textContent = 'MQTT Connected';
     }
   });
-  mqttClient.on('error', () => {
+
+  mqttClient.on('error', (err) => {
+    console.error('MQTT Connection Error:', err);
+    if (status) status.style.display = 'none';
+    if (error) error.style.display = 'block';
     const pill = document.querySelector('.mqtt-pill');
     if (pill) pill.classList.add('error');
+  });
+
+  mqttClient.on('offline', () => {
+    if (status) status.style.display = 'none';
+    if (error) error.style.display = 'block';
   });
 }
 
