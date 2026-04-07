@@ -75,7 +75,10 @@ function init3D() {
   container.addEventListener('pointerdown', onPointerDown);
   window.addEventListener('pointermove', onPointerMove);
   window.addEventListener('pointerup', onPointerUp);
-  container.addEventListener('wheel', e => { orbit.zoomV += e.deltaY * 0.002; e.preventDefault(); }, { passive: false });
+  container.addEventListener('wheel', e => { 
+    orbit.radius = clamp(orbit.radius + e.deltaY * 0.01, 5, 30);
+    e.preventDefault(); 
+  }, { passive: false });
 
   // Start Simulation with Default Devices
   createDevice('led', 0, 0);
@@ -249,7 +252,7 @@ function createDevice(type, x, z) {
   group.traverse(o => { if (o.isMesh) o.userData.deviceId = id; });
   scene.add(group);
 
-  const dev = { id, type, group, state: false, level: 75, meshRefs: refs, topicBase: `iotzy/room/${id}` };
+  const dev = { id, type, group, state: false, level: 75, meshRefs: refs, topicBase: `iotzy/${type}` };
   devices.push(dev);
   if (type === 'door') refreshWallHoles();
   rebuildWires();
@@ -374,7 +377,6 @@ function updateStats() {
 // INPUT HANDLING
 // ============================================================
 function onPointerDown(e) {
-  if (e.button !== 0) return;
   const rect = renderer.domElement.getBoundingClientRect();
   ptr.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
   ptr.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
@@ -382,19 +384,24 @@ function onPointerDown(e) {
   raycaster.setFromCamera(ptr, camera);
   const hits = raycaster.intersectObjects(devices.map(d => d.group), true);
 
-  if (hits.length) {
-    let n = hits[0].object;
-    while (n && !n.userData.deviceId) n = n.parent;
-    if (n) {
-      const dev = devices.find(d => d.id === n.userData.deviceId);
-      selectDevice(dev.id);
-      if (dev.type === 'door') { toggleDev(dev.id); return; }
-      inp.mode = 'drag'; inp.devId = dev.id;
-      if (raycaster.ray.intersectPlane(dragPlane, dragPt)) inp.offset.copy(dev.group.position).sub(dragPt);
-      return;
+  // Klik Kiri (0) untuk Drag/Select, Klik Tengah (1) untuk Orbit
+  if (e.button === 0) {
+    if (hits.length) {
+      let n = hits[0].object;
+      while (n && !n.userData.deviceId) n = n.parent;
+      if (n) {
+        const dev = devices.find(d => d.id === n.userData.deviceId);
+        selectDevice(dev.id);
+        if (dev.type === 'door') { toggleDev(dev.id); return; }
+        inp.mode = 'drag'; inp.devId = dev.id;
+        if (raycaster.ray.intersectPlane(dragPlane, dragPt)) inp.offset.copy(dev.group.position).sub(dragPt);
+        return;
+      }
     }
+  } else if (e.button === 1) {
+    inp.mode = 'orbit'; inp.sx = e.clientX; inp.sy = e.clientY;
+    e.preventDefault();
   }
-  inp.mode = 'orbit'; inp.sx = e.clientX; inp.sy = e.clientY;
 }
 
 function onPointerMove(e) {
