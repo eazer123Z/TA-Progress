@@ -1,4 +1,57 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // --- THREE.JS BACKGROUND ANIMATION ---
+    const initThreeJS = () => {
+        const container = document.getElementById('canvas-container');
+        if (!container) return;
+
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        container.appendChild(renderer.domElement);
+
+        // Grid Helper
+        const gridHelper = new THREE.GridHelper(100, 50, 0x00d2ff, 0x051a24);
+        gridHelper.position.y = -5;
+        scene.add(gridHelper);
+
+        // Floating particles or subtle elements
+        const particlesGeometry = new THREE.BufferGeometry();
+        const count = 200;
+        const positions = new Float32Array(count * 3);
+        for(let i=0; i<count*3; i++) {
+            positions[i] = (Math.random() - 0.5) * 50;
+        }
+        particlesGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        const particlesMaterial = new THREE.PointsMaterial({
+            color: 0x00d2ff,
+            size: 0.1,
+            transparent: true,
+            opacity: 0.5
+        });
+        const particles = new THREE.Points(particlesGeometry, particlesMaterial);
+        scene.add(particles);
+
+        camera.position.z = 15;
+        camera.position.y = 2;
+
+        const animateBG = () => {
+            requestAnimationFrame(animateBG);
+            particles.rotation.y += 0.001;
+            gridHelper.rotation.y += 0.0005;
+            renderer.render(scene, camera);
+        };
+        animateBG();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    };
+    initThreeJS();
+
     // --- NAVIGATION & SCROLL ---
     const links = document.querySelectorAll('.nav-links a');
     const sections = document.querySelectorAll('header, section');
