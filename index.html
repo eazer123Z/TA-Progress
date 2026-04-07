@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Progress TA — Smart Room IoT & CV</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-content">
+                <div class="logo">
+                    <i class="fas fa-microchip"></i>
+                    <span>TA-Progress</span>
+                </div>
+                <div class="nav-links">
+                    <a href="#overview" class="active">Overview</a>
+                    <a href="#components">Komponen</a>
+                    <a href="#logs">Log Bimbingan</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <header class="hero" id="overview">
+        <div class="container">
+            <div class="hero-content">
+                <div class="badge">Tugas Akhir / Skripsi</div>
+                <h1>Rancang Bangun Smart Room Berbasis Internet of Things dan Computer Vision</h1>
+                <p class="subtitle">Monitoring, Automasi, dan Kontrol Manual</p>
+                
+                <div class="advisors">
+                    <div class="advisor">
+                        <i class="fas fa-user-tie"></i>
+                        <div>
+                            <span>Dosen Pembimbing 1</span>
+                            <strong>Abdullah Hanif, S.Kom., M.Kom.</strong>
+                        </div>
+                    </div>
+                    <div class="advisor">
+                        <i class="fas fa-user-tie"></i>
+                        <div>
+                            <span>Dosen Pembimbing 2</span>
+                            <strong>Fara Triadi, S.T., M.T.</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="section" id="description">
+            <div class="card card-dark">
+                <div class="card-header">
+                    <i class="fas fa-info-circle"></i>
+                    <h2>Deskripsi Proyek</h2>
+                </div>
+                <p>Smart room dengan berbagai alat IoT yang berfungsi otomatis sesuai settingan pengguna. Fitur utama mencakup kontrol lampu berbasis intensitas cahaya kamera, pengaturan kecepatan kipas berbasis suhu (DHT22) dan jumlah orang (TensorFlow.js), serta sistem penguncian pintu otomatis yang terjadwal.</p>
+            </div>
+        </section>
+
+        <section class="section" id="components">
+            <div class="section-title">
+                <i class="fas fa-layer-group"></i>
+                <h2>List Komponen</h2>
+            </div>
+            <div class="component-grid">
+                <div class="comp-card">
+                    <i class="fas fa-brain"></i>
+                    <h3>ESP32</h3>
+                    <p>Microcontroller Utama</p>
+                </div>
+                <div class="comp-card">
+                    <i class="fas fa-camera"></i>
+                    <h3>ESP32-CAM</h3>
+                    <p>Computer Vision & Stream</p>
+                </div>
+                <div class="comp-card">
+                    <i class="fas fa-thermometer-half"></i>
+                    <h3>DHT22</h3>
+                    <p>Sensor Suhu & Kelembaban</p>
+                </div>
+                <div class="comp-card">
+                    <i class="fas fa-bolt"></i>
+                    <h3>MOSFET IRLZ44N</h3>
+                    <p>Kontrol Daya DC Fan</p>
+                </div>
+                <div class="comp-card">
+                    <i class="fas fa-wind"></i>
+                    <h3>DC Fan 5V</h3>
+                    <p>Sistem Pendingin</p>
+                </div>
+                <div class="comp-card">
+                    <i class="fas fa-lightbulb"></i>
+                    <h3>LED 5mm</h3>
+                    <p>Output Pencahayaan</p>
+                </div>
+                <div class="comp-card">
+                    <i class="fas fa-door-open"></i>
+                    <h3>Servo SG90</h3>
+                    <p>Mekanisme Kunci Pintu</p>
+                </div>
+                <div class="comp-card">
+                    <i class="fas fa-plug"></i>
+                    <h3>Adaptor 12V</h3>
+                    <p>Sumber Daya Utama</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="section" id="logs">
+            <div class="section-title">
+                <i class="fas fa-history"></i>
+                <h2>Log Bimbingan & Progress</h2>
+            </div>
+            <div class="log-table-container">
+                <table class="log-table">
+                    <thead>
+                        <tr>
+                            <th>No</th>
+                            <th>Tanggal</th>
+                            <th>Dosen</th>
+                            <th>Materi & Konsultasi</th>
+                            <th>Progress & Hasil</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>1</td>
+                            <td>26-02-2026</td>
+                            <td>Pak Hanif</td>
+                            <td>
+                                <strong>Diskusi Bentuk Alat:</strong> Miniatur vs Portable.<br>
+                                <span class="tag">Keputusan:</span> Fokus ke miniatur untuk pengujian deteksi orang.
+                            </td>
+                            <td>
+                                <strong>Hasil:</strong> Komponen dasar (ESP, DHT, Servo) berhasil terhubung dan berjalan.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>2</td>
+                            <td>04-03-2026</td>
+                            <td>Pak Fara</td>
+                            <td>
+                                <strong>Metode CV:</strong> TensorFlow.js (COCO-SSD).<br>
+                                <span class="tag">Riset:</span> Analisis margin error saat orang berdempetan.
+                            </td>
+                            <td>
+                                <strong>Hasil:</strong> Sistem deteksi orang, monitoring suhu, dan kontrol alat via web sudah sinkron.
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>3</td>
+                            <td>12-03-2026</td>
+                            <td>Pak Hanif</td>
+                            <td>
+                                <strong>Implementasi AI:</strong> Penggunaan AI dalam koding.<br>
+                                <span class="tag">Riset:</span> Monitoring konsumsi daya (Sensor INA219).
+                            </td>
+                            <td>
+                                <strong>Hasil:</strong> Pemahaman kode diperdalam, opsi monitoring daya mulai diterapkan secara opsional.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 Dashboard Tugas Akhir. Dibuat untuk monitoring progres penelitian.</p>
+        </div>
+    </footer>
+
+    <script src="assets/js/main.js"></script>
+</body>
+</html>
