@@ -17,6 +17,7 @@
     <div id="loadingStatus">
       <i class="fas fa-spinner fa-spin" style="font-size:2rem; color:var(--cyan); margin-bottom:15px;"></i>
       <p>Menghubungkan ke MQTT Broker...</p>
+      <p id="loadingCountdown" style="font-size:.72rem; color:var(--muted); margin-top:8px; font-family:var(--mono);"></p>
     </div>
     <div id="loadingError" style="display:none;">
       <i class="fas fa-exclamation-triangle" style="font-size:2rem; color:var(--red); margin-bottom:15px;"></i>
@@ -35,6 +36,7 @@
       <a href="#simulation">Smart Room 3D</a>
       <a href="#components">Komponen</a>
       <a href="#logs">Log Bimbingan</a>
+      <a href="#sources">Referensi</a>
     </div>
     <div class="mqtt-pill" id="mqttPill">
       <div class="dot" id="mqttDot"></div>
@@ -71,21 +73,25 @@
       </div>
       <div>
         <div class="stats-grid">
-          <div class="stat-card">
+          <div class="stat-card" id="statCardTemp">
             <div class="stat-val" id="heroTemp">--</div>
             <div class="stat-label">Suhu Ruangan °C</div>
+            <div class="stat-time" id="heroTempTime">—</div>
           </div>
-          <div class="stat-card">
+          <div class="stat-card" id="statCardHumid">
             <div class="stat-val" id="heroHumid">--</div>
             <div class="stat-label">Kelembaban %</div>
+            <div class="stat-time" id="heroHumidTime">—</div>
           </div>
-          <div class="stat-card">
+          <div class="stat-card" id="statCardPerson">
             <div class="stat-val" id="heroPerson">0</div>
             <div class="stat-label">Jumlah Orang</div>
+            <div class="stat-time" id="heroPersonTime">—</div>
           </div>
-          <div class="stat-card">
+          <div class="stat-card" id="statCardFan">
             <div class="stat-val" id="heroFan">--</div>
             <div class="stat-label">Fan Speed %</div>
+            <div class="stat-time" id="heroFanTime">—</div>
           </div>
         </div>
       </div>
@@ -124,7 +130,7 @@
             <div class="dot on" id="simDot"></div>
             <span>Live 3D View</span>
           </div>
-          <div class="sim-hint">DRAG = ORBIT · SCROLL = ZOOM · CLICK = SELECT</div>
+          <div class="sim-hint">LEFT DRAG = ORBIT · SCROLL = ZOOM · CLICK = SELECT</div>
         </div>
         <div id="three-canvas"></div>
       </div>
@@ -221,16 +227,35 @@
         </tbody>
       </table>
     </div>
+  </div>
+</section>
 
-    <!-- SOURCE SECTION -->
-    <div id="sourceDisplay" style="margin-top:30px; padding:25px; background:var(--card); border:1px solid var(--border); border-radius:18px; backdrop-filter:blur(12px);">
-      <div class="sec-head" style="margin-bottom:15px;">
-        <i class="fas fa-paperclip"></i>
-        <h3 style="font-family:'Orbitron',sans-serif; font-size:1rem;">Source & Referensi</h3>
+<!-- SUMBER & REFERENSI — NEW SECTION -->
+<section class="section" id="sources">
+  <div class="section-inner">
+    <div class="sec-head-row">
+      <div class="sec-head" style="margin-bottom:0">
+        <i class="fas fa-bookmark"></i>
+        <h2>Sumber & Referensi</h2>
       </div>
-      <div id="sourceList" style="display:flex; flex-wrap:wrap; gap:12px;">
-        <!-- Rendered via JS -->
-      </div>
+      <button class="btn btn-primary" onclick="openSourceModal()"><i class="fas fa-plus"></i> Tambah Referensi</button>
+    </div>
+    <div class="source-wrap">
+      <table class="source-table">
+        <thead>
+          <tr>
+            <th width="50">No</th>
+            <th>Judul</th>
+            <th>Sumber / Link</th>
+            <th width="100">Tipe</th>
+            <th>Ringkasan</th>
+            <th width="90">Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="sourceBody">
+          <!-- Rendered via JS -->
+        </tbody>
+      </table>
     </div>
   </div>
 </section>
@@ -272,13 +297,47 @@
         <label>Hasil Project</label>
         <textarea id="logResult" placeholder="Hasil akhir project"></textarea>
       </div>
-      <div class="form-group">
-        <label>Source / Link (PDF/Word/Catatan)</label>
-        <input type="text" id="logSource" placeholder="https://... atau Judul Catatan">
-      </div>
       <div class="modal-foot">
         <button type="button" class="btn btn-ghost" onclick="closeLogModal()">Batal</button>
         <button type="submit" class="btn btn-primary">Simpan Log</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL SOURCE -->
+<div class="modal" id="sourceModal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3 id="sourceModalTitle">Tambah Referensi</h3>
+      <button class="modal-close" onclick="closeSourceModal()">&times;</button>
+    </div>
+    <form class="modal-form" onsubmit="saveSource(event)">
+      <input type="hidden" id="srcId">
+      <div class="form-group">
+        <label>Judul</label>
+        <input type="text" id="srcTitle" placeholder="Judul referensi" required>
+      </div>
+      <div class="form-group">
+        <label>Sumber / Link</label>
+        <input type="text" id="srcLink" placeholder="https://... atau nama file" required>
+      </div>
+      <div class="form-group">
+        <label>Tipe</label>
+        <select id="srcType" required>
+          <option value="PDF">PDF</option>
+          <option value="Web">Web</option>
+          <option value="Jurnal">Jurnal</option>
+          <option value="Catatan">Catatan</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Ringkasan</label>
+        <textarea id="srcSummary" placeholder="Ringkasan singkat referensi"></textarea>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" onclick="closeSourceModal()">Batal</button>
+        <button type="submit" class="btn btn-primary">Simpan Referensi</button>
       </div>
     </form>
   </div>

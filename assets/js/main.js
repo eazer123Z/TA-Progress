@@ -1,31 +1,205 @@
 /**
  * IoTzy — Smart Room Dashboard Logic
- * Combining 3D Simulation & CRUD Management
+ * Combining 3D Simulation, MQTT, Sensor Data, CRUD Management,
+ * Source/Reference Table, and Performance Optimizations.
+ *
+ * @fileoverview Main application logic for IoTzy thesis dashboard.
+ * @version 2.0.0
  */
 
 // ============================================================
-// CONFIG & GLOBALS
+// §1 — CONFIG & GLOBALS
 // ============================================================
-const MQTT_URL = 'wss://broker.emqx.io:8084/mqtt';
-const RW = 10, RH = 5.6, RD = 8; // Room Dimensions
 
+/** @const {string} MQTT WebSocket broker URL */
+const MQTT_URL = 'wss://broker.emqx.io:8084/mqtt';
+
+/** @const {number} Room dimensions (width, height, depth) */
+const RW = 10, RH = 5.6, RD = 8;
+
+/** Three.js core objects */
 let scene, camera, renderer, raycaster, clock;
-let devices = []; // Integrated Device State
+
+/** @type {Array<Object>} All IoT devices in the scene */
+let devices = [];
+
+/** @type {Array<THREE.Mesh>} Room wall meshes */
 let roomWalls = [];
+
+/** Pointer / raycaster helpers */
 const ptr = new THREE.Vector2();
 const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const dragPt = new THREE.Vector3();
+
+/** Orbit camera state */
 const orbit = { target: new THREE.Vector3(0, 1.6, 0), yaw: 0.8, pitch: 0.38, radius: 13, yawV: 0, pitchV: 0, zoomV: 0 };
+
+/** Input / drag state */
 const inp = { mode: null, devId: null, ptrId: null, sx: 0, sy: 0, moved: false, offset: new THREE.Vector3(), dragWireDirty: false };
 
+/** @type {mqtt.MqttClient|null} MQTT client instance */
 let mqttClient = null;
+
+/** @type {boolean} Whether we're in simulated (offline) mode */
+let simulatedMode = false;
+
+/** @type {boolean} Whether Three.js has been initialized */
+let threeInitialized = false;
+
+/** Wire color map per device type */
 const WIRE_COLORS = { led: 0x00c8ff, fan: 0x0af, cam: 0xf59e0b, esp: 0xa855f7, door: 0x10b981, dht: 0xffffff };
 const wireGroup = new THREE.Group();
 
+/** Shadow map dirty flag — only update when devices move */
+let shadowMapDirty = true;
+
+/** Throttle for rebuildWires — max once per 100ms */
+let _wireThrottleTimer = null;
+let _wireThrottlePending = false;
+
 // ============================================================
-// 3D CORE INITIALIZATION
+// §2 — REALISTIC SENSOR SIMULATION
 // ============================================================
+
+/**
+ * Sensor simulation state with realistic drift, noise, and spikes.
+ * Replaces simple sin/cos with Ornstein-Uhlenbeck-like process.
+ */
+const sensorSim = {
+  temp: { value: 25.0, target: 26.0, drift: 0.02, noise: 0.15, spikeChance: 0.02, min: 18, max: 38 },
+  humid: { value: 58.0, target: 60.0, drift: 0.015, noise: 0.3, spikeChance: 0.015, min: 30, max: 85 },
+  personCount: 0,
+  fanSpeed: 50,
+  fanAutoMode: true,
+  lastUpdate: Date.now()
+};
+
+/**
+ * Advance a single sensor value with realistic drift + noise + occasional spikes.
+ * @param {Object} s - Sensor state object with value, target, drift, noise, spikeChance, min, max
+ * @returns {number} Updated sensor value
+ */
+function advanceSensor(s) {
+  // Slowly drift target
+  if (Math.random() < 0.05) {
+    s.target += (Math.random() - 0.5) * 2;
+    s.target = clamp(s.target, s.min, s.max);
+  }
+  // Mean-revert toward target with noise
+  const pull = (s.target - s.value) * s.drift;
+  const noise = (Math.random() - 0.5) * s.noise;
+  s.value += pull + noise;
+  // Occasional spike
+  if (Math.random() < s.spikeChance) {
+    s.value += (Math.random() - 0.5) * 4;
+  }
+  s.value = clamp(s.value, s.min, s.max);
+  return s.value;
+}
+
+/**
+ * Compute person count based on camera device state.
+ * If any cam is ON, detect 1-3 people randomly (changes occasionally).
+ * If all cams OFF, person count = 0.
+ * @returns {number}
+ */
+function computePersonCount() {
+  const anyCamOn = devices.some(d => d.type === 'cam' && d.state);
+  if (!anyCamOn) return 0;
+  // Change person count occasionally (every ~5 ticks on average)
+  if (Math.random() < 0.2) {
+    sensorSim.personCount = Math.floor(Math.random() * 3) + 1;
+  }
+  return sensorSim.personCount || 1;
+}
+
+/**
+ * Auto-adjust fan speed based on temperature when in auto mode.
+ * Hotter = faster. Maps temp 20-35°C to fan 20-100%.
+ * @param {number} temp - Current temperature
+ * @returns {number} Fan speed percentage
+ */
+function computeAutoFanSpeed(temp) {
+  if (!sensorSim.fanAutoMode) return sensorSim.fanSpeed;
+  const mapped = ((temp - 20) / 15) * 80 + 20;
+  sensorSim.fanSpeed = Math.round(clamp(mapped, 15, 100));
+  return sensorSim.fanSpeed;
+}
+
+/**
+ * Flash a stat card and its value element to indicate a change.
+ * @param {string} cardId - The stat-card element id
+ * @param {string} valId - The stat-val element id
+ */
+function flashStat(cardId, valId) {
+  const card = document.getElementById(cardId);
+  const val = document.getElementById(valId);
+  if (card) { card.classList.remove('pulse'); void card.offsetWidth; card.classList.add('pulse'); }
+  if (val) { val.classList.remove('flash'); void val.offsetWidth; val.classList.add('flash'); }
+}
+
+/**
+ * Format current time as HH:MM:SS for "last updated" display.
+ * @returns {string}
+ */
+function nowTimeStr() {
+  return new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+/**
+ * Main sensor update tick — called every 1 second.
+ * Updates sensor values, hero cards, timestamps, and flashes.
+ */
+function updateSensorVisuals() {
+  const temp = advanceSensor(sensorSim.temp);
+  const humid = advanceSensor(sensorSim.humid);
+  const persons = computePersonCount();
+  const fanSpd = computeAutoFanSpeed(temp);
+  const ts = nowTimeStr();
+
+  // Update hero stat values
+  const hTemp = document.getElementById('heroTemp');
+  const hHumid = document.getElementById('heroHumid');
+  const hPerson = document.getElementById('heroPerson');
+  const hFan = document.getElementById('heroFan');
+
+  if (hTemp) { hTemp.textContent = temp.toFixed(1); flashStat('statCardTemp', 'heroTemp'); }
+  if (hHumid) { hHumid.textContent = humid.toFixed(1); flashStat('statCardHumid', 'heroHumid'); }
+  if (hPerson) {
+    const prev = parseInt(hPerson.textContent) || 0;
+    hPerson.textContent = persons;
+    if (prev !== persons) flashStat('statCardPerson', 'heroPerson');
+  }
+  if (hFan) { hFan.textContent = fanSpd + '%'; flashStat('statCardFan', 'heroFan'); }
+
+  // Update timestamps
+  const ids = ['heroTempTime', 'heroHumidTime', 'heroPersonTime', 'heroFanTime'];
+  ids.forEach(id => { const el = document.getElementById(id); if (el) el.textContent = 'Updated ' + ts; });
+
+  // Auto-adjust fan devices in scene when in auto mode
+  if (sensorSim.fanAutoMode) {
+    devices.filter(d => d.type === 'fan' && d.state).forEach(d => {
+      d.level = fanSpd;
+      applyDeviceVisuals(d);
+    });
+  }
+
+  sensorSim.lastUpdate = Date.now();
+}
+
+// ============================================================
+// §3 — THREE.JS CORE INITIALIZATION (Lazy)
+// ============================================================
+
+/**
+ * Initialize Three.js scene, camera, renderer, lighting, room geometry,
+ * default devices, and start the animation loop.
+ * Called lazily when the simulation section is near the viewport.
+ */
 function init3D() {
+  if (threeInitialized) return;
+  threeInitialized = true;
+
   const container = document.getElementById('three-canvas');
   if (!container) return;
 
@@ -35,7 +209,7 @@ function init3D() {
   renderer.setSize(container.clientWidth, container.clientHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.shadowMap.autoUpdate = false;
+  renderer.shadowMap.autoUpdate = false; // Manual shadow updates only
   renderer.setClearColor(0x060c14, 1);
   container.appendChild(renderer.domElement);
 
@@ -65,20 +239,23 @@ function init3D() {
   makeWall(RD, RH, RW / 2, RH / 2, 0, -Math.PI / 2, 'right');
 
   // Furniture (Static Decorations)
-  box(3.8, 0.04, 1.1, 0x4a3c2c, -0.3, 0.78, 2.6); // Desk Top
-  box(3.8, 0.72, 0.18, 0x3c3020, -0.3, 0.43, 3.18); // Desk Back
-  box(2.54, 1.48, 0.065, 0x1a2030, 0, 1.7, -3.93); // TV Frame
+  box(3.8, 0.04, 1.1, 0x4a3c2c, -0.3, 0.78, 2.6);
+  box(3.8, 0.72, 0.18, 0x3c3020, -0.3, 0.43, 3.18);
+  box(2.54, 1.48, 0.065, 0x1a2030, 0, 1.7, -3.93);
   const tvGlow = new THREE.Mesh(new THREE.BoxGeometry(2.36, 1.3, 0.04), new THREE.MeshStandardMaterial({ color: 0x1a2f4a, emissive: 0x00c8ff, emissiveIntensity: 0.2 }));
   tvGlow.position.set(0, 1.7, -3.91); scene.add(tvGlow);
 
-  // Event Listeners
+  // Event Listeners — left drag = orbit (changed from middle button)
   container.addEventListener('pointerdown', onPointerDown);
   window.addEventListener('pointermove', onPointerMove);
   window.addEventListener('pointerup', onPointerUp);
-  container.addEventListener('wheel', e => { 
+  container.addEventListener('wheel', e => {
     orbit.radius = clamp(orbit.radius + e.deltaY * 0.01, 5, 30);
-    e.preventDefault(); 
+    e.preventDefault();
   }, { passive: false });
+
+  // Resize handler
+  window.addEventListener('resize', onWindowResize);
 
   // Start Simulation with Default Devices
   createDevice('led', 0, 0);
@@ -88,16 +265,61 @@ function init3D() {
   createDevice('dht', -2, 2);
   createDevice('door', -RW / 2 + 0.075, 1.2);
 
+  // Initial shadow render
+  shadowMapDirty = true;
+
   animate();
-  connectMQTT();
+}
+
+/**
+ * Handle window resize — update camera aspect and renderer size.
+ */
+function onWindowResize() {
+  if (!renderer || !camera) return;
+  const container = document.getElementById('three-canvas');
+  if (!container) return;
+  const w = container.clientWidth;
+  const h = container.clientHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
 }
 
 // ============================================================
-// 3D HELPERS
+// §4 — THREE.JS HELPERS
 // ============================================================
-function mat(col, rough = 0.78, metal = 0.08) { return new THREE.MeshStandardMaterial({ color: col, roughness: rough, metalness: metal }); }
+
+/**
+ * Create a standard material.
+ * @param {number} col - Hex color
+ * @param {number} [rough=0.78] - Roughness
+ * @param {number} [metal=0.08] - Metalness
+ * @returns {THREE.MeshStandardMaterial}
+ */
+function mat(col, rough = 0.78, metal = 0.08) {
+  return new THREE.MeshStandardMaterial({ color: col, roughness: rough, metalness: metal });
+}
+
+/**
+ * Clamp a value between lo and hi.
+ * @param {number} v
+ * @param {number} lo
+ * @param {number} hi
+ * @returns {number}
+ */
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
+/**
+ * Create a wall with optional door holes.
+ * @param {number} w - Width
+ * @param {number} h - Height
+ * @param {number} x - X position
+ * @param {number} y - Y position
+ * @param {number} z - Z position
+ * @param {number} ry - Y rotation
+ * @param {string} name - Wall identifier
+ * @returns {THREE.Mesh}
+ */
 function makeWall(w, h, x, y, z, ry, name) {
   const shape = new THREE.Shape();
   shape.moveTo(-w / 2, -h / 2); shape.lineTo(w / 2, -h / 2); shape.lineTo(w / 2, h / 2); shape.lineTo(-w / 2, h / 2); shape.lineTo(-w / 2, -h / 2);
@@ -107,6 +329,9 @@ function makeWall(w, h, x, y, z, ry, name) {
   scene.add(m); roomWalls.push(m); return m;
 }
 
+/**
+ * Refresh wall geometry to cut door holes.
+ */
 function refreshWallHoles() {
   roomWalls.forEach(wall => {
     const w = wall.userData.w, h = wall.userData.h;
@@ -130,6 +355,18 @@ function refreshWallHoles() {
   });
 }
 
+/**
+ * Create a simple box mesh and add to scene.
+ * @param {number} w - Width
+ * @param {number} h - Height
+ * @param {number} d - Depth
+ * @param {number} col - Color
+ * @param {number} x - X position
+ * @param {number} y - Y position
+ * @param {number} z - Z position
+ * @param {number} [ry=0] - Y rotation
+ * @returns {THREE.Mesh}
+ */
 function box(w, h, d, col, x, y, z, ry = 0) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(col));
   m.position.set(x, y, z); m.rotation.y = ry; m.castShadow = m.receiveShadow = true;
@@ -137,9 +374,30 @@ function box(w, h, d, col, x, y, z, ry = 0) {
 }
 
 // ============================================================
-// WIRING SYSTEM
+// §5 — WIRING SYSTEM (Throttled)
 // ============================================================
+
+/**
+ * Rebuild all wires from devices to ESP32.
+ * Throttled to max once per 100ms for performance.
+ */
 function rebuildWires() {
+  if (_wireThrottleTimer) {
+    _wireThrottlePending = true;
+    return;
+  }
+  _doRebuildWires();
+  _wireThrottleTimer = setTimeout(() => {
+    _wireThrottleTimer = null;
+    if (_wireThrottlePending) {
+      _wireThrottlePending = false;
+      _doRebuildWires();
+    }
+  }, 100);
+}
+
+/** @private Actual wire rebuild logic */
+function _doRebuildWires() {
   while (wireGroup.children.length) {
     const l = wireGroup.children.pop(); l.geometry.dispose(); l.material.dispose();
   }
@@ -167,8 +425,10 @@ function rebuildWires() {
 }
 
 // ============================================================
-// DEVICE BUILDING (HIGH QUALITY MODELS)
+// §6 — DEVICE BUILDING (High Quality 3D Models)
 // ============================================================
+
+/** @param {THREE.Group} g @param {Object} refs */
 function buildLED(g, refs) {
   const housing = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.05, 0.04, 20), mat(0x606870, 0.4, 0.2));
   housing.position.y = -0.02; g.add(housing);
@@ -180,6 +440,7 @@ function buildLED(g, refs) {
   refs.dome = dome; refs.glow = glow; refs.spot = spot;
 }
 
+/** @param {THREE.Group} g @param {Object} refs */
 function buildFan(g, refs) {
   const frame = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.44, 0.12), mat(0x1e2530, 0.58, 0.18)); g.add(frame);
   const inner = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.38, 0.06), mat(0x131820, 0.7, 0.08)); inner.position.z = 0.04; g.add(inner);
@@ -189,17 +450,19 @@ function buildFan(g, refs) {
     const blade = new THREE.Mesh(new THREE.ShapeGeometry(shape, 6), mat(0x2a3848, 0.52, 0.14)); blade.rotation.z = (b / 7) * Math.PI * 2; blades.add(blade);
   }
   blades.userData.spinRate = 0; blades.userData.targetRate = 0; g.add(blades);
-  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.045, 0.05, 20), mat(0x303d4d, 0.5, 0.18)); hub.rotation.x = Math.PI/2; blades.add(hub);
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.045, 0.05, 20), mat(0x303d4d, 0.5, 0.18)); hub.rotation.x = Math.PI / 2; blades.add(hub);
   refs.blades = blades;
 }
 
+/** @param {THREE.Group} g @param {Object} refs */
 function buildCam(g, refs) {
   const body = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.065, 0.24, 28), mat(0xd0d8e2, 0.38, 0.16)); body.rotation.x = Math.PI / 2; g.add(body);
-  const nose = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.055, 0.05, 24), mat(0x252e3a, 0.3, 0.2)); nose.rotation.x = Math.PI/2; nose.position.z = 0.145; g.add(nose);
+  const nose = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.055, 0.05, 24), mat(0x252e3a, 0.3, 0.2)); nose.rotation.x = Math.PI / 2; nose.position.z = 0.145; g.add(nose);
   const recLed = new THREE.Mesh(new THREE.SphereGeometry(0.007, 8, 8), new THREE.MeshStandardMaterial({ emissive: 0xff2244, emissiveIntensity: 0.5, color: 0x300010 })); recLed.position.set(0.03, 0.024, 0.12); g.add(recLed); refs.recLed = recLed;
   const lensRing = new THREE.Mesh(new THREE.TorusGeometry(0.028, 0.003, 8, 22), new THREE.MeshStandardMaterial({ color: 0x203040, emissive: 0x00c8ff, emissiveIntensity: 0 })); lensRing.position.z = 0.174; g.add(lensRing); refs.lensRing = lensRing;
 }
 
+/** @param {THREE.Group} g @param {Object} refs */
 function buildESP(g, refs) {
   const pcb = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.022, 0.28), mat(0x1e5536, 0.66, 0.05)); g.add(pcb);
   const module = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.042, 0.19), mat(0xb8c8d8, 0.25, 0.58)); module.position.set(-0.14, 0.032, 0); g.add(module);
@@ -207,26 +470,24 @@ function buildESP(g, refs) {
   const wifiGlow = new THREE.PointLight(0x00c8ff, 0, 1.5, 2); wifiGlow.position.set(-0.12, 0.1, 0); g.add(wifiGlow); refs.wifiGlow = wifiGlow;
 }
 
+/** @param {THREE.Group} g @param {Object} refs */
 function buildDHT(g, refs) {
-  // Main Body (White Plastic)
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.22, 0.08), mat(0xf0f0f0, 0.4, 0.1)); g.add(body);
-  // Grid pattern (Simulated with dark lines)
   for (let i = 0; i < 5; i++) {
     const line = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.005, 0.082), mat(0x333333, 0.8, 0));
     line.position.y = -0.08 + (i * 0.04); g.add(line);
   }
-  // Blue label part
   const label = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.04, 0.082), mat(0x0066cc, 0.5, 0.1));
   label.position.y = 0.08; g.add(label);
   const statusLed = new THREE.Mesh(new THREE.SphereGeometry(0.008, 8, 8), new THREE.MeshStandardMaterial({ color: 0x00ff00, emissive: 0x00ff00, emissiveIntensity: 0.5 }));
   statusLed.position.set(0.04, 0.08, 0.042); g.add(statusLed); refs.statusLed = statusLed;
 }
 
+/** @param {THREE.Group} g @param {Object} refs */
 function buildDoor(g, refs) {
   const frameW = 1.2, frameH = 2.4, frameD = 0.15;
   const leafW = frameW - 0.12, leafH = frameH - 0.08, leafD = 0.06;
 
-  // Frame parts
   box(0.08, frameH, frameD, 0x222a35, -frameW / 2 + 0.04, frameH / 2, 0, 0).parent = g;
   box(0.08, frameH, frameD, 0x222a35, frameW / 2 - 0.04, frameH / 2, 0, 0).parent = g;
   box(frameW, 0.08, frameD, 0x222a35, 0, frameH - 0.04, 0, 0).parent = g;
@@ -234,10 +495,9 @@ function buildDoor(g, refs) {
   const pivot = new THREE.Group(); pivot.position.set(-frameW / 2 + 0.08, 0, 0); g.add(pivot);
   const leaf = new THREE.Mesh(new THREE.BoxGeometry(leafW, leafH, leafD), mat(0x323d4d, 0.6, 0.1)); leaf.position.set(leafW / 2, leafH / 2, 0); leaf.castShadow = true; pivot.add(leaf);
 
-  // Handles (Both sides)
   function addHandle(z) {
     const hg = new THREE.Group(); hg.position.set(leafW - 0.12, leafH * 0.45, z); pivot.add(hg);
-    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.22, 12), mat(0xd0d8e0, 0.1, 0.9)); bar.rotation.x = Math.PI/2; bar.position.z = z > 0 ? 0.08 : -0.08; hg.add(bar);
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.22, 12), mat(0xd0d8e0, 0.1, 0.9)); bar.rotation.x = Math.PI / 2; bar.position.z = z > 0 ? 0.08 : -0.08; hg.add(bar);
     const panel = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.32, 0.03), mat(0x121820, 0.3, 0.3)); panel.position.z = z > 0 ? 0.015 : -0.015; hg.add(panel);
   }
   addHandle(leafD / 2); addHandle(-leafD / 2);
@@ -247,8 +507,16 @@ function buildDoor(g, refs) {
 }
 
 // ============================================================
-// DEVICE MANAGEMENT (CRUD)
+// §7 — DEVICE MANAGEMENT (CRUD)
 // ============================================================
+
+/**
+ * Create a new IoT device and add it to the 3D scene.
+ * @param {string} type - Device type (led, fan, cam, esp, dht, door)
+ * @param {number} x - X position
+ * @param {number} z - Z position
+ * @returns {Object} The created device object
+ */
 function createDevice(type, x, z) {
   const id = type + '-' + Math.random().toString(36).slice(2, 6);
   const group = new THREE.Group();
@@ -258,7 +526,7 @@ function createDevice(type, x, z) {
   if (type === 'led') { buildLED(group, refs); baseY = RH; }
   else if (type === 'fan') { buildFan(group, refs); baseY = 1.18; }
   else if (type === 'cam') { buildCam(group, refs); baseY = 4.2; ry = 0.3; }
-  else if (type === 'dht') { buildDHT(group, refs); baseY = 1.8; rx = 0; }
+  else if (type === 'dht') { buildDHT(group, refs); baseY = 1.8; }
   else if (type === 'door') { buildDoor(group, refs); baseY = 0; ry = Math.PI / 2; }
   else { buildESP(group, refs); baseY = 1.45; x = RW / 2 - 0.06; rz = -Math.PI / 2; }
 
@@ -274,10 +542,15 @@ function createDevice(type, x, z) {
   if (type === 'door') refreshWallHoles();
   rebuildWires();
   renderDeviceList();
-  renderer.shadowMap.needsUpdate = true;
+  shadowMapDirty = true;
   return dev;
 }
 
+/**
+ * Toggle a device on/off.
+ * @param {string} id - Device id
+ * @param {boolean} [val] - Explicit state, or toggle if omitted
+ */
 function toggleDev(id, val) {
   const dev = devices.find(d => d.id === id); if (!dev) return;
   dev.state = typeof val === 'boolean' ? val : !dev.state;
@@ -287,6 +560,10 @@ function toggleDev(id, val) {
   updateStats();
 }
 
+/**
+ * Apply visual state (lights, spin, etc.) to a device based on its state/level.
+ * @param {Object} dev - Device object
+ */
 function applyDeviceVisuals(dev) {
   const on = dev.state, lv = dev.level / 100;
   if (dev.type === 'led') {
@@ -310,6 +587,11 @@ function applyDeviceVisuals(dev) {
   }
 }
 
+/**
+ * Set device level (brightness, speed, etc.).
+ * @param {string} id - Device id
+ * @param {number|string} val - Level 0-100
+ */
 function setLevel(id, val) {
   const dev = devices.find(d => d.id === id); if (!dev) return;
   dev.level = parseInt(val);
@@ -317,6 +599,10 @@ function setLevel(id, val) {
   renderDeviceList();
 }
 
+/**
+ * Remove a device from the scene and device list.
+ * @param {string} id - Device id
+ */
 function removeDev(id) {
   const idx = devices.findIndex(d => d.id === id);
   if (idx !== -1) {
@@ -327,13 +613,17 @@ function removeDev(id) {
     rebuildWires();
     renderDeviceList();
     updateStats();
-    renderer.shadowMap.needsUpdate = true;
+    shadowMapDirty = true;
   }
 }
 
 // ============================================================
-// UI RENDERING
+// §8 — UI RENDERING
 // ============================================================
+
+/**
+ * Render the device list sidebar in the 3D simulation panel.
+ */
 function renderDeviceList() {
   const list = document.getElementById('deviceList');
   if (!list) return;
@@ -363,6 +653,10 @@ function renderDeviceList() {
   `).join('');
 }
 
+/**
+ * Select a device and show its properties in the right sidebar.
+ * @param {string} id - Device id
+ */
 function selectDevice(id) {
   const dev = devices.find(d => d.id === id); if (!dev) return;
   document.getElementById('selDevName').textContent = labelOf(dev.type);
@@ -370,31 +664,42 @@ function selectDevice(id) {
   document.getElementById('pLevel').textContent = dev.level + '%';
   document.getElementById('pTopic').textContent = dev.topicBase + '/control';
   document.getElementById('pTime').textContent = new Date().toLocaleTimeString();
-  
-  // Highlight in 3D (optional visual feedback)
+
+  // Focus camera on selected device
   orbit.target.copy(dev.group.position);
 }
 
-function labelOf(t) { return { led: 'LED 5mm', fan: 'Fan DC 5V 4010', cam: 'Cam Mini Indoor', esp: 'ESP32 DevKit V1', door: 'Smart Door', dht: 'Sensor DHT22' }[t] || t; }
+/**
+ * Get human-readable label for a device type.
+ * @param {string} t - Device type key
+ * @returns {string}
+ */
+function labelOf(t) {
+  return { led: 'LED 5mm', fan: 'Fan DC 5V 4010', cam: 'Cam Mini Indoor', esp: 'ESP32 DevKit V1', door: 'Smart Door', dht: 'Sensor DHT22' }[t] || t;
+}
 
+/**
+ * Update device count stats and hero fan speed display.
+ */
 function updateStats() {
   const tot = devices.length, act = devices.filter(d => d.state).length;
   const devEl = document.getElementById('stat-dev');
   const actEl = document.getElementById('stat-act');
   if (devEl) devEl.innerHTML = `<div class="dot ${tot ? 'on' : ''}"></div>${tot} Dev`;
   if (actEl) actEl.innerHTML = `<div class="dot ${act ? 'on' : ''}"></div>${act} On`;
-  
-  // Update Hero Stats
-  const hFan = document.getElementById('heroFan');
-  if (hFan) {
-    const avgFan = devices.filter(d => d.type === 'fan').reduce((a, b) => a + b.level, 0) / (devices.filter(d => d.type === 'fan').length || 1);
-    hFan.textContent = Math.round(avgFan) + '%';
-  }
 }
 
 // ============================================================
-// INPUT HANDLING
+// §9 — INPUT HANDLING (Left-drag = Orbit, Right-click = Drag device)
 // ============================================================
+
+/**
+ * Handle pointer down on the 3D canvas.
+ * Left click on device = select (click on door = toggle).
+ * Left click on empty = start orbit.
+ * Right click on device = start drag.
+ * @param {PointerEvent} e
+ */
 function onPointerDown(e) {
   const rect = renderer.domElement.getBoundingClientRect();
   ptr.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
@@ -403,8 +708,8 @@ function onPointerDown(e) {
   raycaster.setFromCamera(ptr, camera);
   const hits = raycaster.intersectObjects(devices.map(d => d.group), true);
 
-  // Klik Kiri (0) untuk Drag/Select, Klik Tengah (1) untuk Orbit
   if (e.button === 0) {
+    // Left click
     if (hits.length) {
       let n = hits[0].object;
       while (n && !n.userData.deviceId) n = n.parent;
@@ -412,17 +717,38 @@ function onPointerDown(e) {
         const dev = devices.find(d => d.id === n.userData.deviceId);
         selectDevice(dev.id);
         if (dev.type === 'door') { toggleDev(dev.id); return; }
+        // Start orbit even when clicking a device (select only, no drag on left)
+        inp.mode = 'orbit'; inp.sx = e.clientX; inp.sy = e.clientY;
+        return;
+      }
+    }
+    // Left click on empty space = orbit
+    inp.mode = 'orbit'; inp.sx = e.clientX; inp.sy = e.clientY;
+  } else if (e.button === 2) {
+    // Right click = drag device
+    e.preventDefault();
+    if (hits.length) {
+      let n = hits[0].object;
+      while (n && !n.userData.deviceId) n = n.parent;
+      if (n) {
+        const dev = devices.find(d => d.id === n.userData.deviceId);
+        if (dev.type === 'door') return;
         inp.mode = 'drag'; inp.devId = dev.id;
         if (raycaster.ray.intersectPlane(dragPlane, dragPt)) inp.offset.copy(dev.group.position).sub(dragPt);
         return;
       }
     }
   } else if (e.button === 1) {
+    // Middle click = also orbit (legacy)
     inp.mode = 'orbit'; inp.sx = e.clientX; inp.sy = e.clientY;
     e.preventDefault();
   }
 }
 
+/**
+ * Handle pointer move for orbit/drag.
+ * @param {PointerEvent} e
+ */
 function onPointerMove(e) {
   if (!inp.mode) return;
   if (inp.mode === 'orbit') {
@@ -436,6 +762,7 @@ function onPointerMove(e) {
     raycaster.setFromCamera(ptr, camera);
     if (raycaster.ray.intersectPlane(dragPlane, dragPt)) {
       const dev = devices.find(d => d.id === inp.devId);
+      if (!dev) return;
       const tx = clamp(dragPt.x + inp.offset.x, -RW / 2 + 0.5, RW / 2 - 0.5);
       const tz = clamp(dragPt.z + inp.offset.z, -RD / 2 + 0.5, RD / 2 - 0.5);
       if (dev.type === 'esp') {
@@ -446,19 +773,29 @@ function onPointerMove(e) {
         dev.group.position.z = tz;
       }
       rebuildWires();
-      renderer.shadowMap.needsUpdate = true;
+      shadowMapDirty = true;
     }
   }
 }
 
+/**
+ * Handle pointer up — reset input mode.
+ */
 function onPointerUp() { inp.mode = null; }
 
 // ============================================================
-// ANIMATION LOOP
+// §10 — ANIMATION LOOP (Optimized)
 // ============================================================
+
 let blinkT = 0;
+let _animFrameId = null;
+
+/**
+ * Main animation loop. Uses requestAnimationFrame properly.
+ * Shadow map only updates when shadowMapDirty is true.
+ */
 function animate() {
-  requestAnimationFrame(animate);
+  _animFrameId = requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05);
   blinkT += dt;
 
@@ -477,88 +814,84 @@ function animate() {
     }
   });
 
+  // Update camera orbit
   const cp = Math.cos(orbit.pitch);
-  camera.position.set(orbit.target.x + orbit.radius * cp * Math.sin(orbit.yaw), orbit.target.y + orbit.radius * Math.sin(orbit.pitch), orbit.target.z + orbit.radius * cp * Math.cos(orbit.yaw));
+  camera.position.set(
+    orbit.target.x + orbit.radius * cp * Math.sin(orbit.yaw),
+    orbit.target.y + orbit.radius * Math.sin(orbit.pitch),
+    orbit.target.z + orbit.radius * cp * Math.cos(orbit.yaw)
+  );
   camera.lookAt(orbit.target);
+
+  // Only update shadow map when dirty
+  if (shadowMapDirty) {
+    renderer.shadowMap.needsUpdate = true;
+    shadowMapDirty = false;
+  }
+
   renderer.render(scene, camera);
 }
 
 // ============================================================
-// LOG BIMBINGAN CRUD
+// §11 — LOG BIMBINGAN CRUD (Source field removed)
 // ============================================================
+
 const defaultLogs = [
-  { 
-    id: 1, 
-    date: '2026-02-26', 
-    adv: 'Pak Hanif', 
-    tanya: 'Kira kira dari project ini lebih bagus dibuat miniatur ruangan kecil atau alat portable yang bisa dipakai di ruangan asli?, Gimana kalau kamera di ganti sensor dht saja untuk otomatis kipasnya', 
+  {
+    id: 1,
+    date: '2026-02-26',
+    adv: 'Pak Hanif',
+    tanya: 'Kira kira dari project ini lebih bagus dibuat miniatur ruangan kecil atau alat portable yang bisa dipakai di ruangan asli?, Gimana kalau kamera di ganti sensor dht saja untuk otomatis kipasnya',
     materi: 'Pakai apa saja bisa tergantung kamunya yang penting berfungsi dan bekerja lah alatnya, pakai kamera sudah bagus jadi bisa deteksi jumlah orang',
     tangkap: 'Berarti miniatur saja, yang penting saya coba saja dlu sesuai project saya dengan alat yang ada saja dlu dan bekerja juga berfungsi',
     progress: 'Uji coba komponen seperti ESP, DHT, dan servo sebagai pengganti kipas',
-    result: 'Komponen dasar sudah berhasil berjalan dan terhubung',
-    source: ''
+    result: 'Komponen dasar sudah berhasil berjalan dan terhubung'
   },
-  { 
-    id: 2, 
-    date: '2026-03-04', 
-    adv: 'Pak Fara', 
-    tanya: 'Dari judul saya ini gimana menurut bapak?, Kalau bikin miniatur gin berarti uji cobanya pakai orang orangan mainan?', 
+  {
+    id: 2,
+    date: '2026-03-04',
+    adv: 'Pak Fara',
+    tanya: 'Dari judul saya ini gimana menurut bapak?, Kalau bikin miniatur gin berarti uji cobanya pakai orang orangan mainan?',
     materi: 'Pikirkan cara mendeteksi orangnya, metode apa yang dipakai untuk mendeteksi orang, gimana margin errornya jika orang berdampingan di dalam kamera, dan cari latar belakang dari rata-rata penggunaan listrik manusia.',
     tangkap: 'Saya mencoba deteksi orang di web menggunakan TensorFlow.js dengan model COCO-SSD karena lebih ringan untuk browser, namun akurasinya mungkin tidak setinggi YOLO sehingga margin error bisa lebih besar. Misalnya saat orang berdempetan di kamera, bounding box bisa overlap dan terhitung satu. Solusinya bisa mengganti model ke YOLO atau mengubah posisi kamera agar deteksi lebih jelas.',
     progress: 'Disini saya lakukan uji coba untuk deteksi orangnya dan konek ke program untuk alat saya seperti lampu menyala saat gelap, servo berputar saat suhu rendah',
-    result: 'Sistem deteksi orang, kontrol alat, seperti lampu dan sensor serta monitoring suhu dengan sensor dht pada web sudah bekerja',
-    source: ''
+    result: 'Sistem deteksi orang, kontrol alat, seperti lampu dan sensor serta monitoring suhu dengan sensor dht pada web sudah bekerja'
   },
-  { 
-    id: 3, 
-    date: '2026-03-12', 
-    adv: 'Pak Hanif', 
-    tanya: 'Gimana jika buat web terlalu bergantung dengan AI, dan progress saya saat ini gimana, serta kemaren saya di beritahu pak fara untuk cari tahu metode pengenalan orangnya', 
+  {
+    id: 3,
+    date: '2026-03-12',
+    adv: 'Pak Hanif',
+    tanya: 'Gimana jika buat web terlalu bergantung dengan AI, dan progress saya saat ini gimana, serta kemaren saya di beritahu pak fara untuk cari tahu metode pengenalan orangnya',
     materi: 'Tidak apa apa asal masih mengerti dasarnya, dipahami seperti ada text hijau di tiap baris kodenya, serta lebih baik jika ada konsumsi listrik yang terpakai',
     tangkap: 'Ya saya cukup mengerti dengan isi web saya yang saya gunakan PHP native dan menggunakan TensorFlow.js sebagai deteksi orangnya dan untuk konsumsi listrik saya meriset seperti menggunakan sensor ina219',
     progress: 'Ya saya mematangkan pemahaman ke web yang saya buat serta mencari opsi untuk memantau konsumsi listriknya',
-    result: 'Saat ini opsi konsumsi listriknya masih saya terapkan pada website dengan optional jika menggunakan sensor ina 219',
-    source: ''
+    result: 'Saat ini opsi konsumsi listriknya masih saya terapkan pada website dengan optional jika menggunakan sensor ina 219'
   }
 ];
 let logs = JSON.parse(localStorage.getItem('iotzy_logs')) || defaultLogs;
 
+/**
+ * Render log table rows with expandable long-text cells.
+ */
 function renderLogs() {
   const tb = document.getElementById('logBody'); if (!tb) return;
-  const sl = document.getElementById('sourceList');
-  
+
   tb.innerHTML = logs.map((l, i) => `
     <tr>
       <td style="color:var(--muted);font-family:var(--mono);font-size:.8rem">${i + 1}</td>
       <td style="font-family:var(--mono);font-size:.82rem;white-space:nowrap">${l.date}</td>
       <td style="font-weight:600;white-space:nowrap">${l.adv}</td>
-      <td style="font-size:.8rem">${l.tanya || '—'}</td>
-      <td style="font-size:.8rem">${l.materi || '—'}</td>
-      <td style="font-size:.8rem">${l.tangkap || '—'}</td>
-      <td style="font-size:.8rem">${l.progress || '—'}</td>
-      <td style="font-size:.8rem">${l.result || '—'}</td>
+      <td style="font-size:.8rem"><div class="cell-truncated" onclick="this.classList.toggle('expanded')">${l.tanya || '—'}</div></td>
+      <td style="font-size:.8rem"><div class="cell-truncated" onclick="this.classList.toggle('expanded')">${l.materi || '—'}</div></td>
+      <td style="font-size:.8rem"><div class="cell-truncated" onclick="this.classList.toggle('expanded')">${l.tangkap || '—'}</div></td>
+      <td style="font-size:.8rem"><div class="cell-truncated" onclick="this.classList.toggle('expanded')">${l.progress || '—'}</div></td>
+      <td style="font-size:.8rem"><div class="cell-truncated" onclick="this.classList.toggle('expanded')">${l.result || '—'}</div></td>
       <td class="actions">
         <button class="btn-icon" onclick="editLog(${l.id})"><i class="fas fa-edit"></i></button>
         <button class="btn-icon btn-del" onclick="deleteLog(${l.id})"><i class="fas fa-trash"></i></button>
       </td>
     </tr>
   `).join('');
-
-  if (sl) {
-    const sources = logs.filter(l => l.source).map(l => {
-      const isLink = l.source.startsWith('http');
-      return `
-        <div class="stat-card" style="padding:12px 20px; display:flex; align-items:center; gap:12px;">
-          <i class="fas ${isLink ? 'fa-link' : 'fa-file-alt'}" style="color:var(--cyan)"></i>
-          <div style="flex:1">
-            <div style="font-size:0.6rem; color:var(--muted); text-transform:uppercase;">Source dari Log #${logs.indexOf(l) + 1}</div>
-            ${isLink ? `<a href="${l.source}" target="_blank" style="color:var(--text); text-decoration:none; font-size:0.8rem; font-weight:600;">${l.source.substring(0, 30)}...</a>` : `<span style="font-size:0.8rem; font-weight:600;">${l.source}</span>`}
-          </div>
-        </div>
-      `;
-    });
-    sl.innerHTML = sources.length ? sources.join('') : '<p style="color:var(--muted); font-size:0.8rem;">Belum ada source yang diinput.</p>';
-  }
 }
 
 window.openLogModal = (edit = false) => {
@@ -573,7 +906,6 @@ window.openLogModal = (edit = false) => {
     document.getElementById('logTangkap').value = '';
     document.getElementById('logProgress').value = '';
     document.getElementById('logResult').value = '';
-    document.getElementById('logSource').value = '';
   }
 };
 window.closeLogModal = () => { document.getElementById('logModal').classList.remove('open'); };
@@ -589,8 +921,7 @@ window.saveLog = (e) => {
     materi: document.getElementById('logMateri').value,
     tangkap: document.getElementById('logTangkap').value,
     progress: document.getElementById('logProgress').value,
-    result: document.getElementById('logResult').value,
-    source: document.getElementById('logSource').value
+    result: document.getElementById('logResult').value
   };
   if (id) { const i = logs.findIndex(l => l.id == id); logs[i] = data; } else { logs.push(data); }
   localStorage.setItem('iotzy_logs', JSON.stringify(logs)); renderLogs(); closeLogModal();
@@ -606,7 +937,6 @@ window.editLog = (id) => {
   document.getElementById('logTangkap').value = l.tangkap || '';
   document.getElementById('logProgress').value = l.progress || '';
   document.getElementById('logResult').value = l.result || '';
-  document.getElementById('logSource').value = l.source || '';
   window.openLogModal(true);
 };
 
@@ -616,66 +946,311 @@ window.deleteLog = (id) => {
 };
 
 // ============================================================
-// MQTT & SENSOR SIMULATION
+// §12 — SOURCE / REFERENCE TABLE CRUD (NEW)
 // ============================================================
+
+const defaultSources = [
+  {
+    id: 1,
+    title: 'IoT-Based Smart Room Monitoring and Control System Using ESP32',
+    link: 'https://ieeexplore.ieee.org/document/9358201',
+    type: 'Jurnal',
+    summary: 'Implementasi sistem monitoring ruangan pintar berbasis ESP32 dengan sensor DHT22 dan kontrol aktuator melalui protokol MQTT.'
+  },
+  {
+    id: 2,
+    title: 'PID Controller Design for Temperature Regulation in Smart Buildings',
+    link: 'https://doi.org/10.1016/j.enbuild.2021.110987',
+    type: 'Jurnal',
+    summary: 'Desain kontroler PID untuk regulasi suhu otomatis pada bangunan pintar, termasuk tuning parameter dan analisis respons sistem.'
+  },
+  {
+    id: 3,
+    title: 'Real-Time Object Detection in the Browser with TensorFlow.js and COCO-SSD',
+    link: 'https://www.tensorflow.org/js/models',
+    type: 'Web',
+    summary: 'Dokumentasi resmi TensorFlow.js untuk deteksi objek real-time di browser menggunakan model COCO-SSD, termasuk person detection.'
+  },
+  {
+    id: 4,
+    title: 'Perancangan Sistem Smart Room Berbasis IoT untuk Efisiensi Energi',
+    link: 'Skripsi - Universitas Telkom 2024',
+    type: 'PDF',
+    summary: 'Referensi skripsi tentang perancangan smart room dengan fokus efisiensi energi menggunakan sensor PIR, DHT, dan relay module.'
+  }
+];
+let sources = JSON.parse(localStorage.getItem('iotzy_sources')) || defaultSources;
+
+/**
+ * Render the source/reference table.
+ */
+function renderSources() {
+  const tb = document.getElementById('sourceBody'); if (!tb) return;
+  const typeClass = { PDF: 'pdf', Web: 'web', Jurnal: 'jurnal', Catatan: 'catatan' };
+
+  tb.innerHTML = sources.map((s, i) => {
+    const isLink = s.link && s.link.startsWith('http');
+    const linkHtml = isLink
+      ? `<a href="${s.link}" target="_blank" rel="noopener">${s.link.length > 45 ? s.link.substring(0, 45) + '...' : s.link}</a>`
+      : `<span>${s.link || '—'}</span>`;
+    return `
+    <tr>
+      <td style="color:var(--muted);font-family:var(--mono);font-size:.8rem">${i + 1}</td>
+      <td style="font-weight:600">${s.title}</td>
+      <td>${linkHtml}</td>
+      <td><span class="source-type-badge ${typeClass[s.type] || 'web'}">${s.type}</span></td>
+      <td style="font-size:.78rem"><div class="cell-truncated" onclick="this.classList.toggle('expanded')">${s.summary || '—'}</div></td>
+      <td class="actions">
+        <button class="btn-icon" onclick="editSource(${s.id})"><i class="fas fa-edit"></i></button>
+        <button class="btn-icon btn-del" onclick="deleteSource(${s.id})"><i class="fas fa-trash"></i></button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+window.openSourceModal = (edit = false) => {
+  document.getElementById('sourceModal').classList.add('open');
+  document.getElementById('sourceModalTitle').textContent = edit ? 'Edit Referensi' : 'Tambah Referensi';
+  if (!edit) {
+    document.getElementById('srcId').value = '';
+    document.getElementById('srcTitle').value = '';
+    document.getElementById('srcLink').value = '';
+    document.getElementById('srcType').value = 'Web';
+    document.getElementById('srcSummary').value = '';
+  }
+};
+window.closeSourceModal = () => { document.getElementById('sourceModal').classList.remove('open'); };
+
+window.saveSource = (e) => {
+  e.preventDefault();
+  const id = document.getElementById('srcId').value;
+  const data = {
+    id: id ? parseInt(id) : Date.now(),
+    title: document.getElementById('srcTitle').value,
+    link: document.getElementById('srcLink').value,
+    type: document.getElementById('srcType').value,
+    summary: document.getElementById('srcSummary').value
+  };
+  if (id) { const i = sources.findIndex(s => s.id == id); sources[i] = data; } else { sources.push(data); }
+  localStorage.setItem('iotzy_sources', JSON.stringify(sources)); renderSources(); closeSourceModal();
+};
+
+window.editSource = (id) => {
+  const s = sources.find(x => x.id == id); if (!s) return;
+  document.getElementById('srcId').value = s.id;
+  document.getElementById('srcTitle').value = s.title;
+  document.getElementById('srcLink').value = s.link;
+  document.getElementById('srcType').value = s.type;
+  document.getElementById('srcSummary').value = s.summary || '';
+  window.openSourceModal(true);
+};
+
+window.deleteSource = (id) => {
+  if (!confirm('Hapus referensi ini?')) return;
+  sources = sources.filter(s => s.id != id);
+  localStorage.setItem('iotzy_sources', JSON.stringify(sources));
+  renderSources();
+};
+
+// ============================================================
+// §13 — MQTT CONNECTION (Reconnect + Fallback to Simulated)
+// ============================================================
+
+/** @const {number} Max MQTT reconnect attempts before fallback */
+const MQTT_MAX_RETRIES = 3;
+
+/** @const {number} Loading overlay auto-dismiss timeout (ms) */
+const LOADING_TIMEOUT_MS = 3000;
+
+let _mqttRetries = 0;
+
+/**
+ * Connect to MQTT broker with reconnect logic.
+ * After MQTT_MAX_RETRIES failures, falls back to simulated mode.
+ * Loading overlay auto-dismisses after LOADING_TIMEOUT_MS.
+ */
 function connectMQTT() {
   const overlay = document.getElementById('loadingOverlay');
   const status = document.getElementById('loadingStatus');
-  const error = document.getElementById('loadingError');
+  const countdown = document.getElementById('loadingCountdown');
 
-  mqttClient = mqtt.connect(MQTT_URL, { 
-    clientId: 'iotzy_' + Math.random().toString(16).slice(2, 10),
-    connectTimeout: 5000 
-  });
-
-  mqttClient.on('connect', () => {
-    console.log('MQTT Connected');
-    if (overlay) overlay.style.display = 'none';
-    const pill = document.querySelector('.mqtt-pill');
-    if (pill) {
-      pill.classList.add('connected');
-      document.getElementById('mqttLabel').textContent = 'MQTT Connected';
+  // Auto-dismiss loading overlay after timeout
+  const loadingTimer = setTimeout(() => {
+    if (overlay && overlay.style.display !== 'none') {
+      enterSimulatedMode();
+      if (overlay) overlay.style.display = 'none';
     }
-  });
+  }, LOADING_TIMEOUT_MS);
 
-  mqttClient.on('error', (err) => {
-    console.error('MQTT Connection Error:', err);
-    if (status) status.style.display = 'none';
-    if (error) error.style.display = 'block';
-    const pill = document.querySelector('.mqtt-pill');
-    if (pill) pill.classList.add('error');
-  });
+  // Countdown display
+  let remaining = Math.ceil(LOADING_TIMEOUT_MS / 1000);
+  const countdownInterval = setInterval(() => {
+    remaining--;
+    if (countdown) countdown.textContent = `Auto-fallback dalam ${remaining}s...`;
+    if (remaining <= 0) clearInterval(countdownInterval);
+  }, 1000);
 
-  mqttClient.on('offline', () => {
-    if (status) status.style.display = 'none';
-    if (error) error.style.display = 'block';
-  });
+  try {
+    mqttClient = mqtt.connect(MQTT_URL, {
+      clientId: 'iotzy_' + Math.random().toString(16).slice(2, 10),
+      connectTimeout: 2500,
+      reconnectPeriod: 1000
+    });
+
+    mqttClient.on('connect', () => {
+      console.log('MQTT Connected');
+      clearTimeout(loadingTimer);
+      clearInterval(countdownInterval);
+      _mqttRetries = 0;
+      simulatedMode = false;
+      if (overlay) overlay.style.display = 'none';
+      updateMqttPill('connected', 'MQTT Connected');
+    });
+
+    mqttClient.on('error', (err) => {
+      console.warn('MQTT Error:', err.message);
+      _mqttRetries++;
+      if (_mqttRetries >= MQTT_MAX_RETRIES) {
+        mqttClient.end(true);
+        clearTimeout(loadingTimer);
+        clearInterval(countdownInterval);
+        enterSimulatedMode();
+        if (overlay) overlay.style.display = 'none';
+      }
+    });
+
+    mqttClient.on('offline', () => {
+      _mqttRetries++;
+      if (_mqttRetries >= MQTT_MAX_RETRIES) {
+        mqttClient.end(true);
+        clearTimeout(loadingTimer);
+        clearInterval(countdownInterval);
+        enterSimulatedMode();
+        if (overlay) overlay.style.display = 'none';
+      }
+    });
+
+    mqttClient.on('reconnect', () => {
+      console.log(`MQTT reconnect attempt ${_mqttRetries + 1}/${MQTT_MAX_RETRIES}`);
+    });
+  } catch (e) {
+    console.error('MQTT init failed:', e);
+    clearTimeout(loadingTimer);
+    clearInterval(countdownInterval);
+    enterSimulatedMode();
+    if (overlay) overlay.style.display = 'none';
+  }
 }
 
-function updateSensorVisuals() {
-  const temp = 24 + Math.sin(Date.now() / 5000) * 2;
-  const humid = 60 + Math.cos(Date.now() / 4000) * 5;
-  
-  if (document.getElementById('sTemp')) document.getElementById('sTemp').textContent = temp.toFixed(1);
-  if (document.getElementById('heroTemp')) document.getElementById('heroTemp').textContent = temp.toFixed(1);
-  if (document.getElementById('tempBar')) document.getElementById('tempBar').style.width = (temp * 2) + '%';
-  
-  if (document.getElementById('sHumid')) document.getElementById('sHumid').textContent = 'Kelembaban: ' + humid.toFixed(1) + '%';
-  if (document.getElementById('heroHumid')) document.getElementById('heroHumid').textContent = humid.toFixed(1);
+/**
+ * Enter simulated mode — show badge, update pill.
+ */
+function enterSimulatedMode() {
+  simulatedMode = true;
+  updateMqttPill('simulated', 'Simulated Mode');
+  console.log('Switched to Simulated Mode');
+}
+
+/**
+ * Update the MQTT status pill in the navbar.
+ * @param {string} state - 'connected', 'error', 'simulated', or ''
+ * @param {string} label - Display text
+ */
+function updateMqttPill(state, label) {
+  const pill = document.getElementById('mqttPill');
+  if (!pill) return;
+  pill.className = 'mqtt-pill ' + state;
+  const lbl = document.getElementById('mqttLabel');
+  if (lbl) {
+    lbl.textContent = label;
+    // Add simulated badge
+    if (state === 'simulated') {
+      const existing = pill.querySelector('.sim-mode-badge');
+      if (!existing) {
+        const badge = document.createElement('span');
+        badge.className = 'sim-mode-badge';
+        badge.textContent = 'SIM';
+        pill.appendChild(badge);
+      }
+    }
+  }
 }
 
 // ============================================================
-// INIT ON LOAD
+// §14 — LAZY THREE.JS INIT (IntersectionObserver)
 // ============================================================
+
+/**
+ * Set up IntersectionObserver to lazy-init Three.js when the
+ * simulation section is near the viewport.
+ */
+function setupLazyThreeInit() {
+  const simSection = document.getElementById('simulation');
+  if (!simSection) { init3D(); return; }
+
+  if ('IntersectionObserver' in window) {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          init3D();
+          observer.disconnect();
+        }
+      });
+    }, { rootMargin: '200px' }); // Start loading 200px before visible
+    observer.observe(simSection);
+  } else {
+    // Fallback for old browsers
+    init3D();
+  }
+}
+
+// ============================================================
+// §15 — NAVIGATION HIGHLIGHTING (Debounced)
+// ============================================================
+
+let _scrollDebounceTimer = null;
+
+/**
+ * Debounced scroll handler for nav link highlighting.
+ */
+function onScrollDebounced() {
+  if (_scrollDebounceTimer) return;
+  _scrollDebounceTimer = setTimeout(() => {
+    _scrollDebounceTimer = null;
+    let current = '';
+    document.querySelectorAll('section[id]').forEach(s => {
+      if (window.scrollY >= s.offsetTop - 100) current = s.id;
+    });
+    const navLinks = document.querySelectorAll('.nav-links a');
+    navLinks.forEach(a => {
+      a.classList.remove('active');
+      if (a.getAttribute('href') === '#' + current) a.classList.add('active');
+    });
+  }, 100);
+}
+
+// ============================================================
+// §16 — INIT ON LOAD
+// ============================================================
+
 document.addEventListener('DOMContentLoaded', () => {
   renderLogs();
-  init3D();
+  renderSources();
   updateStats();
-  setInterval(updateSensorVisuals, 2000);
+
+  // Lazy init Three.js
+  setupLazyThreeInit();
+
+  // Connect MQTT (non-blocking)
+  connectMQTT();
+
+  // Sensor updates every 1 second
+  setInterval(updateSensorVisuals, 1000);
 
   // Add Device Buttons
   document.querySelectorAll('.add-btn').forEach(btn => {
     btn.addEventListener('click', () => {
+      if (!threeInitialized) { init3D(); }
       const type = btn.dataset.type;
       const x = (Math.random() - 0.5) * 6;
       const z = (Math.random() - 0.5) * 4;
@@ -683,27 +1258,26 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Navigation Highlighting
-  const navLinks = document.querySelectorAll('.nav-links a');
-  window.addEventListener('scroll', () => {
-    let current = '';
-    document.querySelectorAll('section[id]').forEach(s => {
-      if (window.scrollY >= s.offsetTop - 100) current = s.id;
-    });
-    navLinks.forEach(a => {
-      a.classList.remove('active');
-      if (a.getAttribute('href') === '#' + current) a.classList.add('active');
-    });
-  });
+  // Debounced scroll for nav highlighting
+  window.addEventListener('scroll', onScrollDebounced, { passive: true });
+
+  // Prevent context menu on 3D canvas (for right-click drag)
+  const canvas = document.getElementById('three-canvas');
+  if (canvas) {
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+  }
 });
 
+/**
+ * Toggle simulation (legacy button handler).
+ */
 window.toggleSimulation = () => {
   const label = document.getElementById('simLabel');
   const icon = document.getElementById('simIcon');
+  if (!label || !icon) return;
   if (label.textContent === 'Mulai Simulasi') {
     label.textContent = 'Stop Simulasi';
     icon.className = 'fas fa-stop-circle';
-    // Logic to start auto-data feed
   } else {
     label.textContent = 'Mulai Simulasi';
     icon.className = 'fas fa-play-circle';
